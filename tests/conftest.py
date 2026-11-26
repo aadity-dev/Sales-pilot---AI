@@ -24,6 +24,7 @@ def client(tmp_path: Path, test_knowledge_dir: Path, monkeypatch: pytest.MonkeyP
     # Ensure tests stay isolated from any real .env keys on the developer's machine.
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
     monkeypatch.delenv("SALESPILOT_LOCAL_LLM_URL", raising=False)
     app = create_app(
         db_path=tmp_path / "salespilot-test.db",

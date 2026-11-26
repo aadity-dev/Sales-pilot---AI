@@ -88,7 +88,7 @@ def test_gemini_smart_turn_validates_verbatim_quotes(monkeypatch):
     from backend.app.services import local_llm
 
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
     captured_requests = []
 
@@ -141,5 +141,5 @@ def test_gemini_smart_turn_validates_verbatim_quotes(monkeypatch):
     assert result["facts"]["budget_amount"]["value"] == 50000
     assert "company" not in result["facts"]  # unquoted hallucination rejected
     url, body = captured_requests[0]
-    assert "gemini-2.5-flash:generateContent" in url
-    assert body["generationConfig"]["thinkingConfig"]["thinkingBudget"] == 0
+    assert "gemini-3.1-flash-lite:generateContent" in url
+    assert body["generationConfig"]["thinkingConfig"]["thinkingLevel"] == "minimal"

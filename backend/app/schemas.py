@@ -43,7 +43,7 @@ class TTSRequest(BaseModel):
 
 class GeminiConfigRequest(BaseModel):
     api_key: str = Field(default="", max_length=256)
-    model: str = Field(default="gemini-2.5-flash", min_length=1, max_length=80)
+    model: str = Field(default="gemini-3.1-flash-lite", min_length=1, max_length=80)
 
 
 class ModelConfig(BaseModel):

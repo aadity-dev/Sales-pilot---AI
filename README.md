@@ -143,14 +143,14 @@ Restart SalesPilot. The dashboard's text input and browser Web Speech remain usa
 
 ## Optional LLM (Google Gemini or local endpoint)
 
-The default app runs with no API key required. To enable natural multi-turn English & Hinglish conversations powered by **Google Gemini** (`gemini-2.5-flash` with `thinkingBudget: 0` for low-latency voice), either:
+The default app runs with no API key required. To enable natural multi-turn English & Hinglish conversations powered by **Google Gemini** (`gemini-3.1-flash-lite` with minimal thinking for low-latency voice), either:
 
 1. Click **✦ Connect Gemini AI** in the dashboard topbar and paste your Gemini API key, **or**
 2. Add it to `.env`:
 
 ```text
 GEMINI_API_KEY=your-gemini-api-key
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.1-flash-lite
 ```
 
 Alternatively, you may run a local model server exposing an OpenAI-compatible `/v1/chat/completions` endpoint (such as Ollama or LM Studio):

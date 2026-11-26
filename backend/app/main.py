@@ -433,7 +433,7 @@ def create_app(
     @app.post("/api/settings/gemini")
     def configure_gemini(payload: GeminiConfigRequest) -> dict[str, Any]:
         clean_key = payload.api_key.strip()
-        clean_model = payload.model.strip() or "gemini-2.5-flash"
+        clean_model = payload.model.strip() or "gemini-3.1-flash-lite"
         if not clean_key:
             os.environ.pop("GEMINI_API_KEY", None)
             os.environ.pop("GOOGLE_API_KEY", None)

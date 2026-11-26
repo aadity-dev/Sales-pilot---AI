@@ -298,7 +298,7 @@ async function loadCapabilities() {
     $('sidebarCapabilities').textContent = caps.join(' · ');
     $('healthPill').innerHTML = `<i></i> ${escapeHtml(caps.slice(0, 2).join(' · ').toUpperCase())}`;
 
-    updateGeminiPill(Boolean(health.gemini_configured), health.gemini_model || 'gemini-2.5-flash');
+    updateGeminiPill(Boolean(health.gemini_configured), health.gemini_model || 'gemini-3.1-flash-lite');
   } catch (_) {
     $('sidebarCapabilities').textContent = 'Local workflow active';
   }

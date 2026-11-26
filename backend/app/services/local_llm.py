@@ -16,7 +16,18 @@ import urllib.request
 from typing import Any
 
 ALLOWED_FIELDS = {"name", "company", "requirement", "budget_amount", "timeline_days", "decision_maker"}
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
+
+
+def _thinking_config_for(model: str) -> dict[str, Any] | None:
+    m = model.lower()
+    if "2.5" in m:
+        return {"thinkingBudget": 0}
+    if "3.8" in m or "flash-latest" in m:
+        return {"thinkingLevel": "low"}
+    if "3." in m or "3-" in m:
+        return {"thinkingLevel": "minimal"}
+    return None
 
 
 def get_gemini_api_key() -> str:
@@ -51,20 +62,33 @@ def _strip_json_fences(text: str) -> str:
 
 
 def verify_gemini_key(api_key: str, model: str = DEFAULT_GEMINI_MODEL) -> tuple[bool, str]:
-    """Validate a Gemini API key and model access with a lightweight metadata request."""
+    """Validate a Gemini API key and model generation availability."""
     clean_key = api_key.strip()
     clean_model = (model or DEFAULT_GEMINI_MODEL).strip()
     if not clean_key:
         return False, "API key cannot be empty."
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{urllib.parse.quote(clean_model)}?key={urllib.parse.quote(clean_key)}"
+        f"{urllib.parse.quote(clean_model)}:generateContent?key={urllib.parse.quote(clean_key)}"
     )
-    req = urllib.request.Request(url, method="GET")
+    gen_config: dict[str, Any] = {"maxOutputTokens": 12, "temperature": 0.0}
+    tc = _thinking_config_for(clean_model)
+    if tc:
+        gen_config["thinkingConfig"] = tc
+    body = {
+        "contents": [{"role": "user", "parts": [{"text": "Reply with OK"}]}],
+        "generationConfig": gen_config,
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     try:
-        with urllib.request.urlopen(req, timeout=8.0) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        return True, f"Connected to {data.get('displayName') or clean_model}"
+        with urllib.request.urlopen(req, timeout=15.0) as resp:
+            json.loads(resp.read().decode("utf-8"))
+        return True, f"Connected to {clean_model}"
     except urllib.error.HTTPError as exc:
         try:
             err = json.loads(exc.read().decode("utf-8")).get("error", {}).get("message", "")
@@ -79,16 +103,12 @@ def _gemini_json_completion(
     system_prompt: str,
     turns: list[dict[str, str]],
     temperature: float = 0.25,
-    timeout: float = 10.0,
+    timeout: float = 15.0,
 ) -> str | None:
     api_key = get_gemini_api_key()
     if not api_key:
         return None
     model = get_gemini_model()
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{urllib.parse.quote(model)}:generateContent?key={urllib.parse.quote(api_key)}"
-    )
 
     contents = []
     for item in turns:
@@ -105,34 +125,46 @@ def _gemini_json_completion(
     if not contents or contents[-1]["role"] != "user":
         return None
 
-    gen_config: dict[str, Any] = {
-        "temperature": temperature,
-        "responseMimeType": "application/json",
-        "maxOutputTokens": 450,
-    }
-    if "2.5" in model:
-        gen_config["thinkingConfig"] = {"thinkingBudget": 0}
+    models_to_try = [model]
+    if model == DEFAULT_GEMINI_MODEL:
+        models_to_try.append("gemini-3.5-flash-lite")
 
-    payload = {
-        "systemInstruction": {"parts": [{"text": system_prompt}]},
-        "contents": contents,
-        "generationConfig": gen_config,
-    }
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            result = json.loads(response.read().decode("utf-8"))
-        candidates = result.get("candidates") or []
-        parts = candidates[0]["content"]["parts"]
-        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
-        return _strip_json_fences(text) if text else None
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError, OSError):
-        return None
+    for candidate_model in models_to_try:
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{urllib.parse.quote(candidate_model)}:generateContent?key={urllib.parse.quote(api_key)}"
+        )
+        gen_config: dict[str, Any] = {
+            "temperature": temperature,
+            "responseMimeType": "application/json",
+            "maxOutputTokens": 450,
+        }
+        tc = _thinking_config_for(candidate_model)
+        if tc:
+            gen_config["thinkingConfig"] = tc
+
+        payload = {
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": contents,
+            "generationConfig": gen_config,
+        }
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=min(timeout, 10.0)) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            candidates = result.get("candidates") or []
+            parts = candidates[0]["content"]["parts"]
+            text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+            if text:
+                return _strip_json_fences(text)
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError, OSError):
+            continue
+    return None
 
 
 def _local_completion(messages: list[dict[str, str]], temperature: float = 0.0, timeout: float = 8.0) -> str | None:
@@ -374,7 +406,7 @@ def generate_smart_sales_turn(
         user_prompt=user_prompt,
         history=history,
         temperature=0.35,
-        timeout=10.0,
+        timeout=15.0,
     )
     if not content:
         return None

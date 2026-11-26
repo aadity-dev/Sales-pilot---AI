@@ -177,8 +177,9 @@ def test_gemini_configuration_and_chat_workflow(client, monkeypatch):
             return False
 
     def fake_urlopen(req, timeout=10.0):
-        if req.get_method() == "GET":
-            return FakeResp({"displayName": "Gemini 2.5 Flash"})
+        req_body = json.loads(req.data.decode("utf-8"))
+        if req_body.get("contents", [{}])[0].get("parts", [{}])[0].get("text") == "Reply with OK":
+            return FakeResp({"candidates": [{"content": {"parts": [{"text": "OK"}]}}]})
         return FakeResp({
             "candidates": [{
                 "content": {
@@ -197,13 +198,13 @@ def test_gemini_configuration_and_chat_workflow(client, monkeypatch):
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
 
-    saved = client.post("/api/settings/gemini", json={"api_key": "AIza-fake-key", "model": "gemini-2.5-flash"})
+    saved = client.post("/api/settings/gemini", json={"api_key": "AQ.fake-key", "model": "gemini-3.1-flash-lite"})
     assert saved.status_code == 200
     assert saved.json()["gemini_configured"] is True
 
     health = client.get("/api/health").json()
     assert health["gemini_configured"] is True
-    assert health["gemini_model"] == "gemini-2.5-flash"
+    assert health["gemini_model"] == "gemini-3.1-flash-lite"
 
     lead_id = client.post("/api/leads", json={"name": "Meera Nair"}).json()["id"]
     chat = client.post("/api/agent/chat", json={
@@ -216,6 +217,6 @@ def test_gemini_configuration_and_chat_workflow(client, monkeypatch):
     assert payload["lead"]["score"] == 50  # 25 requirement + 25 budget (deterministic!)
     assert payload["lead"]["status"] == "warm"
 
-    cleared = client.post("/api/settings/gemini", json={"api_key": "", "model": "gemini-2.5-flash"})
+    cleared = client.post("/api/settings/gemini", json={"api_key": "", "model": "gemini-3.1-flash-lite"})
     assert cleared.status_code == 200
     assert cleared.json()["gemini_configured"] is False

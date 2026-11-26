@@ -90,6 +90,9 @@ def _parse_budget(message: str, asked_budget: bool = False) -> int | None:
     if lakh:
         return int(float(lakh.group(1)) * 100_000)
 
+    if re.search(r"\b(?:half\s+a\s+lakh|aadha\s+lakh)\b", message, re.I):
+        return 50_000
+
     thousand = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:thousand|hazaar|hazar)\b", message, re.I)
     if thousand:
         return int(float(thousand.group(1)) * 1000)
@@ -171,10 +174,11 @@ def extract_facts(message: str, last_agent_message: str | None = None) -> dict[s
 
     if "requirement" not in facts:
         req_patterns = [
-            r"(?:need|looking for|looking to|want to|require|trying to|hoping to|help with|struggling with|problem is|challenge is)\s+([^.!?]{5,110})",
-            r"(?:automate|manage|handle)\s+(?:our|my|the)?\s*([^.!?]{4,90})",
             r"(?:हमको|मुझे|हमें)\s+([^.!?]{4,90}?)\s*(?:चाहिए|करना है)",
             r"\b(?:humko|mujhe|hamein|hume)\s+([a-z0-9\s-]{4,80}?)\s+(?:chahiye|karna hai)",
+            r"(?:^|[,.;]|\b(?:aur|and|hai|ke liye)\b)\s*([a-z0-9\s-]{4,70}?\s+(?:automate|manage|handle))\s+(?:karna hai|chahiye)",
+            r"(?:need|looking for|looking to|want to|require|trying to|hoping to|help with|struggling with|problem is|challenge is)\s+([^.,!?]{5,110})",
+            r"(?:automate|manage|handle)\s+(?:our|my|the)?\s*([^.,!?]{4,90})",
         ]
         for pattern in req_patterns:
             match = re.search(pattern, message, re.I)

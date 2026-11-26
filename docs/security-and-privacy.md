@@ -5,8 +5,9 @@
 - Intended for localhost development and evaluator demonstration.
 - No authentication or multi-tenant authorization is implemented.
 - SQLite records are stored unencrypted in `data/salespilot.db` by default (excluded from git via `.gitignore`).
-- The browser UI uses same-origin local API calls. No third-party analytics or hosted AI API is called by default.
-- Local Whisper.cpp transcription, macOS native `say` speech synthesis, and optional local OpenAI-compatible model endpoints run on the operator's machine. Browser Web Speech API fallback (if chosen in the UI) follows the browser vendor's speech privacy policy.
+- The browser UI uses same-origin local API calls. No third-party analytics or hosted AI API is called by default when no API key is configured.
+- Local Whisper.cpp transcription, macOS native `say` speech synthesis, and optional local OpenAI-compatible model endpoints run on the operator's machine.
+- When optional **Google Gemini** (`GEMINI_API_KEY`) is configured via `.env` or the **✦ Connect Gemini AI** modal (`POST /api/settings/gemini`), conversation turns and retrieved knowledge-base passages are sent over HTTPS to Google's Gemini API (`generativelanguage.googleapis.com`). Keys saved via the UI are stored locally in `.env` and are never returned over HTTP `GET` endpoints. Browser Web Speech API fallback (if chosen in the UI) follows the browser vendor's speech privacy policy.
 - Secrets (`.env`), runtime databases (`data/*.db`), and large local model files (`models/*.bin`) are excluded via `.gitignore`.
 - Use only synthetic lead information and fabricated transcripts during development and evaluation.
 

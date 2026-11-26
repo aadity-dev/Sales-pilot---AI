@@ -8,6 +8,7 @@ flowchart TD
     UI -->|Continuous VAD audio turn| TURN[POST /api/voice/turn]
     UI -->|Live interim captions| BSTT[Browser Web Speech API fallback]
     UI -->|Text chat / CRM / Booking| API[FastAPI application]
+    UI -->|KB Q&A search| KBAPI[GET /api/knowledge/search]
     TURN --> STT[Local Whisper.cpp + FFmpeg]
     TURN --> AG[Sales workflow service]
     API --> AG
@@ -16,8 +17,10 @@ flowchart TD
     AG --> HANDOFF[Handoff and sentiment rules]
     AG --> BOOK[Conversational & calendar booking]
     AG --> RAG[Local TF-IDF retrieval]
+    KBAPI --> RAG
+    KBAPI --> LLM[Optional Gemini 3.1 Flash-Lite / Local LLM]
     RAG --> KB[Markdown / text knowledge base]
-    AG --> LLM[Optional Gemini / Local OpenAI-compatible LLM]
+    AG --> LLM
     TURN --> TTS[Local macOS say WAV / browser speechSynthesis]
     UI -->|Web Audio AnalyserNode| ORB[60fps Voice Orb Visualizer]
     AG --> DB[(SQLite CRM / evidence / calls / bookings)]
@@ -27,19 +30,19 @@ flowchart TD
 ## Core design decisions
 
 1. **Model output is not business authority.** The scoring rubric, appointment conflict checks, CRM writes, and handoff state are controlled deterministically by backend Python logic.
-2. **Evidence is first-class data.** Every extracted field is stored with its transcript quote, field name, status, and confidence. The UI displays this relationship in the Evidence Ledger. An optional local model may supplement rule-based extraction only when it supplies a verbatim quote present in the customer message.
-3. **Unknown is a valid answer.** Retrieval returns source passages from `knowledge_base/`. If there is no sufficient lexical match, the agent declines to guess and flags a human follow-up.
-4. **Local-first continuous voice pipeline.** Continuous browser Voice Activity Detection (VAD) pairs with single-roundtrip `/api/voice/turn` (Whisper.cpp STT -> Agent -> macOS `say` WAV TTS) so audio stays on the machine with minimal turnaround latency. Browser Web Speech API and `speechSynthesis` act as zero-config fallbacks when local binaries are absent.
-5. **Provider boundaries are explicit.** Speech recognition, speech synthesis, and LLM adapters (Gemini REST API / local OpenAI-compatible server) live in isolated modules (`voice.py`, `local_llm.py`) and are not required for CRM, booking, or scoring tests.
+2. **Evidence is first-class data.** Every extracted field is stored with its transcript quote, field name, status, and confidence. The UI displays this relationship in the Evidence Ledger. When Gemini or a local LLM extracts facts inside `generate_smart_sales_turn()`, `validate_fact_payload()` accepts a field only when it includes a verbatim quote found in the customer message.
+3. **Unknown is a valid answer.** Retrieval returns source passages from `knowledge_base/`. If there is no sufficient lexical match (or Gemini KB verification marks `supported=false`), the agent declines to guess and flags a human follow-up rather than inventing product claims.
+4. **Local-first continuous voice pipeline.** Continuous browser Voice Activity Detection (VAD) pairs with single-roundtrip `/api/voice/turn` (Whisper.cpp STT -> Agent -> macOS `say` WAV TTS) so speech processing stays local with low turnaround latency. Browser Web Speech API and `speechSynthesis` act as zero-config fallbacks when local binaries are absent.
+5. **Provider boundaries are explicit.** Speech recognition, speech synthesis, and LLM adapters (Gemini REST API with `gemini-3.1-flash-lite` -> `gemini-3.5-flash-lite` fallback / local OpenAI-compatible server) live in isolated modules (`voice.py`, `local_llm.py`) and are not required for CRM, booking, or scoring tests.
 
 ## Data flow
 
-1. A sales user selects or creates a lead (clicking a Lead Pipeline row or dropdown automatically loads their latest call transcript).
+1. A sales user selects or creates a lead (clicking a Lead Pipeline row or dropdown automatically loads their latest call transcript; the Create Lead form captures the form reference synchronously before async API requests).
 2. Clicking **Start Live Call** opens an echo-cancelled microphone stream once and runs a continuous VAD turn-taking loop (or the user types into the composer).
-3. Customer audio is transcribed via Whisper.cpp (or browser SpeechRecognition), and `agent.py` checks conversational context (prior agent prompt) to extract requirement, budget, timeline, and decision-maker facts.
-4. Each explicitly extracted field is written to `evidence` with the exact customer quote.
-5. `scoring.py` computes the deterministic 0–100 score and hot/warm/cold status from stored fields.
-6. Booking requests check real SQLite availability (`Asia/Kolkata` weekday slots) with overlap checks and idempotency keys; product questions query `knowledge.py` TF-IDF chunks and cite sources or trigger human handoff.
+3. Customer audio is transcribed via Whisper.cpp (or browser SpeechRecognition), and `agent.py` checks conversational context (prior agent prompt + recent call history) to extract requirement, budget, timeline, and decision-maker facts.
+4. When Gemini or a local LLM is configured, `generate_smart_sales_turn()` conducts natural multi-turn English/Hinglish dialogue and proposes verbatim-quoted facts in one roundtrip.
+5. Each explicitly extracted field is written to `evidence` with the exact customer quote, and `scoring.py` computes the deterministic 0–100 score and hot/warm/cold status.
+6. Booking requests check real SQLite availability (`Asia/Kolkata` weekday slots) with overlap checks and idempotency keys; product questions and Knowledge Base search queries (`GET /api/knowledge/search`) query `knowledge.py` TF-IDF chunks and synthesize a strictly grounded Gemini answer (`answer_knowledge_base_query`) with source chips or refuse unsupported questions.
 7. `voice.py` cleans markdown/symbols (`format_for_speech`) and synthesizes WAV audio played through Web Audio API to drive the reactive Voice Orb, then immediately loops back to listening.
 
 ## Evidence Ledger schema

@@ -6,18 +6,18 @@
 
 SalesPilot is a runnable live voice-agent sales prototype. It lets customers hold a continuous hands-free voice call (or text chat) in English or Hinglish, turns customer statements into structured evidence-backed CRM facts, calculates a deterministic lead score, retrieves approved product information from local documents, books conflict-checked demo appointments directly in conversation or the calendar panel, and flags human handoffs when needed.
 
-The project stays transparent about its implementation: the conversational core uses deterministic context-aware extraction, conversational booking, and local TF-IDF retrieval by default (with an optional local OpenAI-compatible LLM add-on). Live voice calls run turn-by-turn over continuous Voice Activity Detection (VAD) with Whisper.cpp transcription and macOS native voice synthesis (`say`) feeding a real-time animated Web Audio orb (with automatic browser Web Speech / `speechSynthesis` fallback on other platforms).
+The project stays transparent about its implementation: the conversational core uses deterministic context-aware extraction, conversational booking, and local TF-IDF retrieval by default, with an optional **Google Gemini (`gemini-3.1-flash-lite`)** or local OpenAI-compatible LLM integration for natural multi-turn English/Hinglish dialogue and Knowledge Base synthesis. Live voice calls run turn-by-turn over continuous Voice Activity Detection (VAD) with Whisper.cpp transcription and macOS native voice synthesis (`say`) feeding a real-time animated Web Audio orb (with automatic browser Web Speech / `speechSynthesis` fallback on other platforms).
 
 ## What works in this MVP
 
 - **Live Voice Call Studio**: One-click **Start Live Call** continuous conversation with a 60fps Web Audio reactive voice orb, live call timer, mic Mute/Unmute (`M`), instant Interrupt / Send Now (`Space`), and live captions.
 - **Single-Roundtrip Local Speech Pipeline**: `POST /api/voice/turn` combines local Whisper.cpp speech-to-text, agent processing, and macOS `say` WAV synthesis (`POST /api/voice/tts`) with automatic browser Web Speech / `speechSynthesis` fallback.
 - **SQLite CRM & Transcript Hydration**: Synthetic demo lead, persisted calls, auto-restored transcripts, clickable Lead Pipeline rows, Evidence Ledger, and appointments with cancellation.
-- **Context-Aware Fact Extraction & Evidence Ledger**: Extracts requirement, budget (including Indian formats like `50k`, `50 hazaar`, `1.5 lakhs`, `₹50,000`), timeline (`next month`, `agle hafte`, `asap`), and decision-maker status (including contextual yes/no answers), linking every field to the customer's exact quote.
+- **Context-Aware Fact Extraction & Evidence Ledger**: Extracts requirement, budget (including Indian formats like `50k`, `50 hazaar`, `half a lakh`, `1.5 lakhs`, `₹50,000`), timeline (`next month`, `agle hafte`, `asap`), and decision-maker status (including contextual yes/no answers), linking every field to the customer's exact quote.
 - **Explainable 0–100 Qualification Score**: Deterministic scoring rubric with criterion-level breakdown and recommended next step.
-- **Grounded Local RAG**: Document chunking and TF-IDF lexical retrieval with source citations; escalates to a human when no verified passage supports the question.
+- **Grounded Local RAG & Gemini Knowledge Search**: Document chunking and TF-IDF lexical retrieval with source citations, plus `GET /api/knowledge/search` Gemini grounded synthesis (`✦ Gemini Grounded Answer` card in the UI for English and Hinglish queries); escalates when no verified passage supports the question.
 - **Conversational & Calendar Appointment Booking**: Book weekday IST demo slots either by voice/chat (*"Can you book a demo for tomorrow at 11 AM?"*) or through the conflict-checked calendar widget.
-- **Optional Local LLM Adapter**: Supports an OpenAI-compatible local endpoint (e.g., Ollama or LM Studio) for conversational phrasing while keeping scoring, evidence, and bookings deterministic.
+- **Optional Gemini & Local LLM Adapters**: Connect Google Gemini (`gemini-3.1-flash-lite` with `gemini-3.5-flash-lite` fallback) via `.env` or the **✦ Connect Gemini AI** topbar modal (`POST /api/settings/gemini`), or point to a local OpenAI-compatible server (Ollama / LM Studio), while keeping scoring, verbatim evidence verification, and bookings deterministic.
 
 ## Quick start on macOS
 
@@ -179,7 +179,7 @@ salespilot_ai/
 │   │   ├── scoring.py          # Deterministic qualification rubric
 │   │   ├── knowledge.py        # Local chunking and TF-IDF-style retrieval
 │   │   ├── voice.py            # Whisper.cpp STT & local macOS say TTS helpers
-│   │   └── local_llm.py        # Optional local-only model adapter
+│   │   └── local_llm.py        # Optional Gemini REST API & local LLM adapter
 │   └── static/                 # Browser Voice Studio & dashboard (HTML/CSS/JS)
 ├── knowledge_base/             # Sample fictional company documents
 ├── data/                       # Runtime SQLite database folder (.gitkeep tracked)
@@ -237,7 +237,7 @@ Lead status: Hot ≥75, Warm ≥50, otherwise Cold. These are demo qualification
 ## Known limitations — read before evaluation
 
 - This is a **functional MVP**, not a production PSTN voice-calling platform.
-- The default agent brain uses deterministic phrase/regex extraction, conversational context tracking, and a rules-based decision flow. It is not a fully autonomous general-purpose LLM agent unless you configure a local model endpoint.
+- The default offline agent uses deterministic phrase/regex extraction, conversational context tracking, and a rules-based decision flow. Conversational generation requires configuring Gemini (`GEMINI_API_KEY`) or a local OpenAI-compatible model endpoint.
 - Retrieval is lexical TF-IDF-style scoring, not a vector embedding database. It works for the included sample documents and is a replaceable MVP retrieval layer.
 - Local WAV TTS uses macOS `say` on Darwin and falls back automatically to browser `speechSynthesis` on other platforms. Local speech recognition requires Whisper.cpp + FFmpeg and a Whisper model file.
 - Real PSTN/SIP telephony, outbound dialing, live full-duplex WebRTC media servers, and production CRM/calendar vendor integrations are not implemented.

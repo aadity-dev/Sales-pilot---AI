@@ -163,6 +163,22 @@ SALESPILOT_LOCAL_LLM_API_KEY=
 
 When configured, Gemini / the local model conducts natural multi-turn dialogue and phrases grounded RAG answers, while scoring, verbatim evidence quote verification, RAG citations, and appointment bookings remain deterministic in backend code. If the model endpoint is unavailable, SalesPilot falls back immediately to deterministic responses.
 
+## Technology stack
+
+| Layer | Technology | Responsibility |
+|---|---|---|
+| Frontend | HTML, CSS, JavaScript (Web Audio API & Canvas) | Voice studio, 60fps orb visualizer, and dashboard |
+| Backend | Python, FastAPI | REST APIs and sales/voice business workflows |
+| Validation | Pydantic | Typed request and payload validation |
+| Database | SQLite | Leads, calls, transcripts, evidence, and appointments |
+| STT | Whisper.cpp (+ FFmpeg) | Local audio-to-text transcription |
+| TTS | macOS `say` | Local WAV speech synthesis |
+| Browser voice | Web Speech API | Live browser STT & `speechSynthesis` fallback |
+| AI model | Gemini (`gemini-3.1-flash-lite`, optional) | Natural multi-turn English/Hinglish replies & KB synthesis |
+| Local model | OpenAI-compatible endpoint (optional) | Self-hosted local LLM adapter (Ollama / LM Studio) |
+| RAG | TF-IDF-style lexical retrieval | Local document chunking, ranking, and citations |
+| Testing | `pytest` (+ `node --check`, `compileall`) | Automated backend, API, and workflow verification |
+
 ## Project structure
 
 ```text

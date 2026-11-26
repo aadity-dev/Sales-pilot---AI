@@ -220,3 +220,48 @@ def test_gemini_configuration_and_chat_workflow(client, monkeypatch):
     cleared = client.post("/api/settings/gemini", json={"api_key": "", "model": "gemini-3.1-flash-lite"})
     assert cleared.status_code == 200
     assert cleared.json()["gemini_configured"] is False
+
+
+def test_knowledge_search_interacts_with_gemini(client, monkeypatch):
+    import json
+
+    class FakeResp:
+        def __init__(self, body: dict):
+            self._data = json.dumps(body).encode("utf-8")
+
+        def read(self):
+            return self._data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(req, timeout=10.0):
+        return FakeResp({
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "text": json.dumps({
+                            "supported": True,
+                            "answer": "Growth plan ₹50,000 per month ka hai (product.md).",
+                            "sources": ["product.md"],
+                        })
+                    }]
+                }
+            }]
+        })
+
+    monkeypatch.setenv("GEMINI_API_KEY", "AQ.fake-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    kb = client.get("/api/knowledge/search", params={"q": "Growth plan kitne ka hai?"})
+    assert kb.status_code == 200
+    data = kb.json()
+    assert data["ai_mode"] == "gemini_assisted"
+    assert data["ai_supported"] is True
+    assert "50,000" in data["ai_answer"]
+    assert data["ai_sources"] == ["product.md"]
+    assert data["results"]

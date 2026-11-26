@@ -209,7 +209,7 @@ FastAPI interactive docs are available at `http://127.0.0.1:8008/docs` while the
 | POST | `/api/agent/chat` | Send a customer message and receive agent output |
 | GET | `/api/calls/{call_id}` | Retrieve transcript messages |
 | GET | `/api/knowledge/documents` | List indexed knowledge documents and chunk counts |
-| GET | `/api/knowledge/search?q=...` | Search local knowledge documents |
+| GET | `/api/knowledge/search?q=...` | Search local docs + Gemini grounded synthesis |
 | POST | `/api/knowledge/reload` | Re-index local Markdown/text documents |
 | GET | `/api/appointments/availability?for_date=YYYY-MM-DD` | List available demo slots |
 | GET/POST | `/api/appointments` | List and book appointments |

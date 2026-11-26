@@ -5,7 +5,7 @@
 
 ## Automated results
 
-- `python -m pytest tests/ -v` — **18 passed**.
+- `python -m pytest tests/ -v` — **19 passed**.
 - `node --check backend/app/static/app.js` — **passed** (JavaScript syntax check).
 - `python -m compileall -q backend` — **passed** (Python compilation check).
 - Live Uvicorn + voice turn end-to-end verification (temporary SQLite DB on port `8118` and `8117`):

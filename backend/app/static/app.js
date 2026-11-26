@@ -1308,20 +1308,24 @@ async function toggleOneShotRecording() {
 /* ─── Lead Creation, Appointments & Knowledge Base ──────────────────── */
 async function createLead(event) {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formEl = event.currentTarget;
+  const form = new FormData(formEl);
   const payload = Object.fromEntries(form.entries());
-  const btn = event.currentTarget.querySelector('button[type="submit"]');
+  const btn = formEl.querySelector('button[type="submit"]');
   btn.disabled = true;
   try {
     const lead = await api('/api/leads', { method: 'POST', body: JSON.stringify(payload) });
+    $('createLeadMessage').style.color = '#129466';
     $('createLeadMessage').textContent = `Created ${lead.name}.`;
-    event.currentTarget.reset();
+    formEl.reset();
     await loadLeads();
     setSelectedLead(lead.id);
     await loadStats();
     showToast(`Switched workspace to ${lead.name}.`);
   } catch (err) {
+    $('createLeadMessage').style.color = '#dc3f59';
     $('createLeadMessage').textContent = err.message;
+    showToast(err.message);
   } finally {
     btn.disabled = false;
   }
@@ -1405,17 +1409,42 @@ async function searchKnowledge(event) {
     await loadKnowledgeDocuments();
     return;
   }
-  $('knowledgeResults').innerHTML = '<span class="muted-empty">Searching local knowledge…</span>';
+  const hasGemini = $('geminiStatusBtn')?.classList.contains('connected');
+  $('knowledgeResults').innerHTML = `<span class="muted-empty">${hasGemini ? 'Searching local docs & asking Gemini AI…' : 'Searching local knowledge…'}</span>`;
   try {
     const result = await api(`/api/knowledge/search?q=${encodeURIComponent(query)}`);
-    $('knowledgeResults').innerHTML = result.results.length
-      ? result.results
-          .map(
-            (hit) =>
-              `<div class="knowledge-hit"><strong>${escapeHtml(hit.source)} · relevance ${hit.score}</strong><p>${escapeHtml(hit.content)}</p></div>`,
-          )
-          .join('')
-      : '<span class="muted-empty">No relevant passages found. SalesPilot will escalate instead of guessing.</span>';
+    const chunks = [];
+    if (result.ai_answer) {
+      const supported = result.ai_supported !== false;
+      const sourceChips = (result.ai_sources || [])
+        .map((s) => `<span class="knowledge-source-chip">${escapeHtml(s)}</span>`)
+        .join('');
+      chunks.push(`
+        <div class="knowledge-ai-card ${supported ? '' : 'unsupported'}">
+          <div class="knowledge-ai-head">
+            <span>✦ ${result.ai_mode === 'gemini_assisted' ? 'Gemini Grounded Answer' : 'AI Grounded Answer'}</span>
+            <div>${sourceChips}</div>
+          </div>
+          <p>${escapeHtml(result.ai_answer)}</p>
+        </div>
+      `);
+    }
+    if (result.results?.length) {
+      chunks.push(
+        ...result.results.map(
+          (hit) =>
+            `<div class="knowledge-hit"><strong>${escapeHtml(hit.source)} · relevance ${hit.score}</strong><p>${escapeHtml(hit.content)}</p></div>`,
+        ),
+      );
+    } else if (!result.ai_answer) {
+      chunks.push('<span class="muted-empty">No relevant passages found. SalesPilot will escalate instead of guessing.</span>');
+    }
+    chunks.push('<button type="button" class="text-button kb-back-link" id="kbBackDocsBtn">← Back to indexed documents</button>');
+    $('knowledgeResults').innerHTML = chunks.join('');
+    $('kbBackDocsBtn')?.addEventListener('click', () => {
+      $('knowledgeQuery').value = '';
+      loadKnowledgeDocuments();
+    });
   } catch (err) {
     $('knowledgeResults').textContent = err.message;
   }

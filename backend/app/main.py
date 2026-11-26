@@ -19,8 +19,10 @@ from .services.agent import create_call, get_evidence, get_lead, process_message
 from .services.knowledge import ingest_directory, retrieve
 from .services.local_llm import (
     active_llm_provider,
+    answer_knowledge_base_query,
     get_gemini_model,
     is_gemini_configured,
+    is_llm_configured,
     is_local_llm_reachable,
     verify_gemini_key,
 )
@@ -233,7 +235,42 @@ def create_app(
     def knowledge_search(q: str) -> dict[str, Any]:
         if not q.strip():
             raise HTTPException(status_code=422, detail="Search query cannot be empty")
-        return {"query": q, "results": retrieve(app.state.db_path, q, limit=5)}
+        results = retrieve(app.state.db_path, q, limit=5)
+        ai_answer: str | None = None
+        ai_supported: bool | None = None
+        ai_sources: list[str] = []
+        ai_mode = "deterministic_local"
+
+        if is_llm_configured():
+            fallback_chunks: list[dict[str, Any]] = []
+            if not results:
+                with connect(app.state.db_path) as conn:
+                    fallback_chunks = [
+                        dict(r)
+                        for r in conn.execute("SELECT id, source, content FROM knowledge_chunks").fetchall()
+                    ]
+            kb_res = answer_knowledge_base_query(q, results, fallback_chunks=fallback_chunks)
+            if kb_res:
+                ai_answer = kb_res["answer"]
+                ai_supported = kb_res["supported"]
+                ai_sources = kb_res["sources"]
+                ai_mode = "gemini_assisted" if is_gemini_configured() else "local_model_assisted"
+                if not results and ai_supported and ai_sources:
+                    allowed = set(ai_sources)
+                    results = [
+                        {"id": c["id"], "source": c["source"], "content": c["content"], "score": 1.0}
+                        for c in fallback_chunks
+                        if c["source"] in allowed
+                    ][:3]
+
+        return {
+            "query": q,
+            "results": results,
+            "ai_answer": ai_answer,
+            "ai_supported": ai_supported,
+            "ai_sources": ai_sources,
+            "ai_mode": ai_mode,
+        }
 
     @app.post("/api/knowledge/reload")
     def knowledge_reload() -> dict[str, Any]:

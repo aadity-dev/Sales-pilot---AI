@@ -9,6 +9,7 @@ from ..db import connect, new_id, utc_now
 from .knowledge import retrieve
 from .local_llm import (
     active_llm_provider,
+    answer_knowledge_base_query,
     extract_verified_facts,
     generate_grounded_answer,
     generate_handoff_reply,
@@ -646,7 +647,7 @@ def process_message(
                     for term in ["what are you", "what do you", "what can you", "what are we", "what will you", "what is this", "tell me about salespilot"]
                 )
                 retrieval_query = "SalesPilot AI product overview capabilities" if generic_product_question else clean_message
-                matches = retrieve(db_path, retrieval_query, limit=2)
+                matches = retrieve(db_path, retrieval_query, limit=3)
                 if matches:
                     first = matches[0]
                     spoken_content = re.sub(r"^#{1,6}\s+.*$", "", str(first["content"]), flags=re.MULTILINE).strip()
@@ -656,6 +657,32 @@ def process_message(
                     if model_answer:
                         response = model_answer
                         model_used = True
+                elif is_llm_configured():
+                    all_chunks = [
+                        dict(r)
+                        for r in conn.execute("SELECT id, source, content FROM knowledge_chunks").fetchall()
+                    ]
+                    kb_res = answer_knowledge_base_query(
+                        clean_message, [], fallback_chunks=all_chunks, language=effective_lang
+                    )
+                    if kb_res and kb_res.get("supported"):
+                        matched_sources = set(kb_res.get("sources") or [])
+                        citations = [
+                            {"source": c["source"], "content": c["content"], "score": 1.0}
+                            for c in all_chunks
+                            if c["source"] in matched_sources
+                        ][:2]
+                        src_label = f" (Source: {', '.join(kb_res['sources'])})" if kb_res.get("sources") else ""
+                        response = f"{kb_res['answer']}{src_label if 'source' not in kb_res['answer'].lower() else ''}"
+                        model_used = True
+                    else:
+                        response = (
+                            kb_res["answer"]
+                            if kb_res and kb_res.get("answer")
+                            else "I don't have verified information for that question in the current knowledge base. I don't want to guess, so I've flagged this for a product specialist to follow up."
+                        )
+                        handoff = True
+                        handoff_reason = "The knowledge base did not contain verified support for the customer's question."
                 else:
                     response = "I don't have verified information for that question in the current knowledge base. I don't want to guess, so I've flagged this for a product specialist to follow up."
                     handoff = True

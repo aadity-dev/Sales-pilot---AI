@@ -8,12 +8,15 @@ lead scoring, verbatim evidence verification, and calendar bookings deterministi
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any
+
+logger = logging.getLogger("salespilot.llm")
 
 ALLOWED_FIELDS = {"name", "company", "requirement", "budget_amount", "timeline_days", "decision_maker"}
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
@@ -155,14 +158,15 @@ def _gemini_json_completion(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=min(timeout, 10.0)) as response:
+            with urllib.request.urlopen(request, timeout=min(max(timeout, 12.0), 15.0)) as response:
                 result = json.loads(response.read().decode("utf-8"))
             candidates = result.get("candidates") or []
             parts = candidates[0]["content"]["parts"]
             text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
             if text:
                 return _strip_json_fences(text)
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError, OSError):
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError, OSError) as exc:
+            logger.warning("Gemini request failed for %s: %s", candidate_model, exc)
             continue
     return None
 
@@ -316,6 +320,59 @@ def generate_grounded_answer(
         return None
     answer = parsed.get("answer") if isinstance(parsed, dict) else None
     return answer.strip()[:2000] if isinstance(answer, str) and answer.strip() else None
+
+
+def answer_knowledge_base_query(
+    question: str,
+    passages: list[dict[str, Any]],
+    fallback_chunks: list[dict[str, Any]] | None = None,
+    language: str = "en-IN",
+) -> dict[str, Any] | None:
+    """Answer a knowledge-base search or FAQ query strictly from KB chunks via Gemini/LLM."""
+    if not is_llm_configured():
+        return None
+    source_pool = passages[:4] if passages else (fallback_chunks or [])[:6]
+    if not source_pool:
+        return None
+    context = "\n\n".join(
+        f"SOURCE: {item.get('source')}\nPASSAGE: {item.get('content')}" for item in source_pool
+    )
+    lang_note = (
+        "Match the user's language (English or Hinglish)."
+        if language
+        else "Reply in clear English or Hinglish matching the question."
+    )
+    content = _complete_json(
+        system_prompt=(
+            "You are the SalesPilot Knowledge Assistant. Answer the query STRICTLY using ONLY the supplied Knowledge Base passages. "
+            "Do NOT invent capabilities, prices, integrations, or policies not explicitly written in the passages. "
+            "If the passages clearly confirm something is NOT supported or NOT confirmed (such as native Shopify integration), set supported=true and state that clearly with the source. "
+            "If the query asks about an unrelated topic not covered anywhere in the passages (for example, unrelated hardware or capabilities), set supported=false and explain it is not covered in the current knowledge base. "
+            f"{lang_note} "
+            'Return JSON ONLY: {"supported": true, "answer": "concise 1-3 sentence grounded answer", "sources": ["filename.md"]}'
+        ),
+        user_prompt=f"Query: {question}\n\nKnowledge Base Passages:\n{context}",
+        temperature=0.1,
+        timeout=14.0,
+    )
+    if not content:
+        return None
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    answer = parsed.get("answer")
+    if not isinstance(answer, str) or not answer.strip():
+        return None
+    supported = bool(parsed.get("supported", True))
+    raw_sources = parsed.get("sources") if isinstance(parsed.get("sources"), list) else []
+    valid_sources = {str(item.get("source")) for item in source_pool if item.get("source")}
+    sources = [str(s) for s in raw_sources if str(s) in valid_sources]
+    if supported and not sources and passages:
+        sources = [str(passages[0].get("source"))]
+    return {"supported": supported, "answer": answer.strip()[:2000], "sources": sources}
 
 
 def generate_conversational_reply(

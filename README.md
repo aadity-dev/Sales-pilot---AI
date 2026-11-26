@@ -1,6 +1,6 @@
 # SalesPilot AI — Local-first live voice sales agent
 
-**Version:** 0.2.0 MVP  
+**Version:** 0.2.0 MVP · **[📄 1-Page Project Report](docs/project-report.md)** · **[🏗 Architecture](docs/architecture.md)** · **[✅ Test Report](docs/test-report.md)**  
 **Target:** macOS (Apple Silicon supported), Linux, and Windows with Python 3.10+  
 **Paid API requirement:** None. The default MVP uses no hosted LLM, STT, TTS, or database API.
 
@@ -185,7 +185,7 @@ salespilot_ai/
 ├── data/                       # Runtime SQLite database folder (.gitkeep tracked)
 ├── models/                     # Local Whisper model folder (.gitkeep tracked)
 ├── tests/                      # Automated tests
-├── docs/                       # Architecture, security, test report and checklist
+├── docs/                       # Project report, architecture, security, test report & checklist
 ├── scripts/                    # Test helper
 ├── requirements.txt
 ├── requirements-dev.txt

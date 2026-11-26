@@ -81,3 +81,65 @@ def test_format_for_speech_removes_markdown():
     assert "**" not in spoken
     assert "50,000 rupees" in spoken
     assert "product faq" in spoken.lower()
+
+
+def test_gemini_smart_turn_validates_verbatim_quotes(monkeypatch):
+    import json
+    from backend.app.services import local_llm
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+    captured_requests = []
+
+    class FakeResp:
+        def __init__(self, body: dict):
+            self._data = json.dumps(body).encode("utf-8")
+
+        def read(self):
+            return self._data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(req, timeout=10.0):
+        payload = json.loads(req.data.decode("utf-8"))
+        captured_requests.append((req.full_url, payload))
+        return FakeResp({
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "text": json.dumps({
+                            "answer": "Awesome, noted half a lakh for your boutique automation! When are you looking to go live?",
+                            "facts": [
+                                {"field": "budget_amount", "value": 50000, "quote": "half a lakh"},
+                                {"field": "company", "value": "Fake Corp", "quote": "invented quote not in message"},
+                            ],
+                        })
+                    }]
+                }
+            }]
+        })
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    msg = "We run an online boutique and can spend half a lakh."
+    result = local_llm.generate_smart_sales_turn(
+        customer_message=msg,
+        lead={"name": "Priya", "score": 0, "status": "cold"},
+        history=[{"role": "agent", "text": "Hi Priya! How can I help?"}],
+        missing_fields=["budget_amount", "timeline_days"],
+        next_slots_summary="Monday: 10:00 AM",
+        knowledge_summary="SalesPilot AI demo assistant.",
+        language="en-IN",
+    )
+    assert result is not None
+    assert "half a lakh" in result["answer"]
+    assert result["facts"]["budget_amount"]["value"] == 50000
+    assert "company" not in result["facts"]  # unquoted hallucination rejected
+    url, body = captured_requests[0]
+    assert "gemini-2.5-flash:generateContent" in url
+    assert body["generationConfig"]["thinkingConfig"]["thinkingBudget"] == 0

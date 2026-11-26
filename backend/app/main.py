@@ -14,10 +14,16 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .db import connect, init_db, new_id, seed_demo_lead, utc_now
-from .schemas import AppointmentCancel, AppointmentCreate, CallCreate, ChatRequest, LeadCreate, TTSRequest
+from .schemas import AppointmentCancel, AppointmentCreate, CallCreate, ChatRequest, GeminiConfigRequest, LeadCreate, TTSRequest
 from .services.agent import create_call, get_evidence, get_lead, process_message
 from .services.knowledge import ingest_directory, retrieve
-from .services.local_llm import is_local_llm_reachable
+from .services.local_llm import (
+    active_llm_provider,
+    get_gemini_model,
+    is_gemini_configured,
+    is_local_llm_reachable,
+    verify_gemini_key,
+)
 from .services.scoring import score_lead
 from .services.voice import (
     EmptySpeechError,
@@ -60,7 +66,36 @@ def _validate_audio_upload(audio: UploadFile) -> None:
     raise HTTPException(status_code=415, detail="Please upload an audio recording")
 
 
-def create_app(db_path: str | Path | None = None, knowledge_dir: str | Path | None = None) -> FastAPI:
+def _upsert_env_vars(env_path: Path, updates: dict[str, str | None]) -> None:
+    lines: list[str] = []
+    if env_path.exists():
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    remaining = {k: (v.replace("\r", "").replace("\n", "") if isinstance(v, str) else None) for k, v in updates.items()}
+    out_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        matched_key = None
+        if stripped and not stripped.startswith("#") and "=" in line:
+            key = line.split("=", 1)[0].strip()
+            if key in remaining:
+                matched_key = key
+        if matched_key is not None:
+            new_val = remaining.pop(matched_key)
+            if new_val:
+                out_lines.append(f"{matched_key}={new_val}")
+        else:
+            out_lines.append(line)
+    for key, val in remaining.items():
+        if val:
+            out_lines.append(f"{key}={val}")
+    env_path.write_text("\n".join(out_lines) + ("\n" if out_lines else ""), encoding="utf-8")
+
+
+def create_app(
+    db_path: str | Path | None = None,
+    knowledge_dir: str | Path | None = None,
+    env_path: str | Path | None = None,
+) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         init_db(application.state.db_path)
@@ -76,6 +111,7 @@ def create_app(db_path: str | Path | None = None, knowledge_dir: str | Path | No
     )
     app.state.db_path = Path(db_path or os.getenv("SALESPILOT_DB_PATH", DEFAULT_DB_PATH))
     app.state.knowledge_dir = Path(knowledge_dir or os.getenv("SALESPILOT_KNOWLEDGE_DIR", DEFAULT_KNOWLEDGE_DIR))
+    app.state.env_path = Path(env_path or ROOT / ".env")
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
@@ -86,6 +122,7 @@ def create_app(db_path: str | Path | None = None, knowledge_dir: str | Path | No
         stt_ok = is_stt_configured()
         tts_ok = is_tts_configured()
         llm_configured = bool(os.getenv("SALESPILOT_LOCAL_LLM_URL", "").strip())
+        gemini_ok = is_gemini_configured()
         return {
             "status": "ok",
             "app": "SalesPilot AI",
@@ -95,6 +132,9 @@ def create_app(db_path: str | Path | None = None, knowledge_dir: str | Path | No
             "knowledge_chunks": chunk_count,
             "speech_to_text_configured": stt_ok,
             "text_to_speech_configured": tts_ok,
+            "gemini_configured": gemini_ok,
+            "gemini_model": get_gemini_model(),
+            "llm_provider": active_llm_provider(),
             "local_llm_configured": llm_configured,
             "local_llm_reachable": is_local_llm_reachable() if llm_configured else False,
             "text_to_speech": "macOS native voice (say) + browser fallback" if tts_ok else "browser speechSynthesis",
@@ -376,15 +416,45 @@ def create_app(db_path: str | Path | None = None, knowledge_dir: str | Path | No
 
     @app.get("/api/settings")
     def settings() -> dict[str, Any]:
+        gemini_ok = is_gemini_configured()
         return {
             "local_first": True,
             "paid_api_required": False,
-            "default_ai_mode": "deterministic-local-workflow",
+            "default_ai_mode": active_llm_provider() or "deterministic-local-workflow",
+            "gemini_configured": gemini_ok,
+            "gemini_model": get_gemini_model(),
             "stt": "whisper.cpp (local)" if is_stt_configured() else "whisper.cpp (optional local setup)",
             "live_browser_stt": "Continuous VAD + Whisper.cpp or Web Speech API",
             "tts": "macOS native voice (say) + browser speechSynthesis fallback" if is_tts_configured() else "browser speechSynthesis",
             "retrieval": "local TF-IDF lexical retrieval",
-            "llm": "Optional local OpenAI-compatible endpoint; disabled by default",
+            "llm": f"Gemini ({get_gemini_model()}) active" if gemini_ok else "Optional Gemini API or local OpenAI-compatible endpoint",
+        }
+
+    @app.post("/api/settings/gemini")
+    def configure_gemini(payload: GeminiConfigRequest) -> dict[str, Any]:
+        clean_key = payload.api_key.strip()
+        clean_model = payload.model.strip() or "gemini-2.5-flash"
+        if not clean_key:
+            os.environ.pop("GEMINI_API_KEY", None)
+            os.environ.pop("GOOGLE_API_KEY", None)
+            _upsert_env_vars(app.state.env_path, {"GEMINI_API_KEY": None, "GOOGLE_API_KEY": None})
+            return {
+                "gemini_configured": False,
+                "gemini_model": clean_model,
+                "message": "Gemini API key cleared. Using deterministic local workflow.",
+            }
+
+        ok, msg = verify_gemini_key(clean_key, clean_model)
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+
+        os.environ["GEMINI_API_KEY"] = clean_key
+        os.environ["GEMINI_MODEL"] = clean_model
+        _upsert_env_vars(app.state.env_path, {"GEMINI_API_KEY": clean_key, "GEMINI_MODEL": clean_model})
+        return {
+            "gemini_configured": True,
+            "gemini_model": clean_model,
+            "message": msg,
         }
 
     @app.get("/")

@@ -5,7 +5,7 @@
 
 ## Automated results
 
-- `python -m pytest tests/ -v` — **16 passed**.
+- `python -m pytest tests/ -v` — **18 passed**.
 - `node --check backend/app/static/app.js` — **passed** (JavaScript syntax check).
 - `python -m compileall -q backend` — **passed** (Python compilation check).
 - Live Uvicorn + voice turn end-to-end verification (temporary SQLite DB on port `8118` and `8117`):
@@ -18,6 +18,7 @@ The pytest suite covers:
 - Application health and seeded synthetic demo lead.
 - Lead creation and the qualification workflow.
 - Explicit fact extraction, contextual decision-maker replies, Hinglish/Indian budget parsing (`50 hazaar`, `1.5 lakhs`), and Evidence Ledger records.
+- Gemini API multi-turn conversational handling (`thinkingBudget: 0`), `/api/settings/gemini` configuration, and rejection of unquoted LLM facts.
 - Deterministic scoring and lead status.
 - Sentiment classification and human escalation.
 - RAG citation for a documented answer and handoff for an unsupported question.

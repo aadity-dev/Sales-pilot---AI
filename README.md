@@ -141,9 +141,19 @@ WHISPER_MODEL_PATH=/absolute/path/to/salespilot_ai/models/ggml-base.bin
 
 Restart SalesPilot. The dashboard's text input and browser Web Speech remain usable even if Whisper.cpp is not configured.
 
-## Optional local LLM (no hosted API)
+## Optional LLM (Google Gemini or local endpoint)
 
-The default app does not contact an LLM service. You may optionally run a local model server exposing an OpenAI-compatible `/v1/chat/completions` endpoint (such as Ollama or LM Studio), then add to `.env`:
+The default app runs with no API key required. To enable natural multi-turn English & Hinglish conversations powered by **Google Gemini** (`gemini-2.5-flash` with `thinkingBudget: 0` for low-latency voice), either:
+
+1. Click **✦ Connect Gemini AI** in the dashboard topbar and paste your Gemini API key, **or**
+2. Add it to `.env`:
+
+```text
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Alternatively, you may run a local model server exposing an OpenAI-compatible `/v1/chat/completions` endpoint (such as Ollama or LM Studio):
 
 ```text
 SALESPILOT_LOCAL_LLM_URL=http://127.0.0.1:11434/v1/chat/completions
@@ -151,7 +161,7 @@ SALESPILOT_LOCAL_LLM_MODEL=qcod:latest
 SALESPILOT_LOCAL_LLM_API_KEY=
 ```
 
-Restart the app. When configured, the local model can phrase retrieved FAQ answers and conversational turns while scoring, evidence quote verification, RAG citations, and appointment bookings remain deterministic in backend code. If the local endpoint is slow or unavailable, SalesPilot falls back immediately to deterministic responses.
+When configured, Gemini / the local model conducts natural multi-turn dialogue and phrases grounded RAG answers, while scoring, verbatim evidence quote verification, RAG citations, and appointment bookings remain deterministic in backend code. If the model endpoint is unavailable, SalesPilot falls back immediately to deterministic responses.
 
 ## Project structure
 
@@ -209,6 +219,7 @@ FastAPI interactive docs are available at `http://127.0.0.1:8008/docs` while the
 | POST | `/api/voice/transcribe` | Local Whisper.cpp audio transcription |
 | POST | `/api/voice/turn` | Single-roundtrip Whisper STT + agent reply + TTS WAV |
 | GET | `/api/settings` | Runtime capability disclosure |
+| POST | `/api/settings/gemini` | Verify and configure Google Gemini API key locally |
 
 ## Lead scoring rubric
 

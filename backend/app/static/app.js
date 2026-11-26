@@ -293,11 +293,25 @@ async function loadCapabilities() {
     const caps = [];
     caps.push(state.sttConfigured ? 'Whisper STT' : 'Browser STT');
     caps.push(state.ttsConfigured ? 'Local Voice' : 'Browser TTS');
-    if (health.local_llm_reachable) caps.push('Local LLM');
+    if (health.gemini_configured) caps.push(`Gemini (${health.gemini_model})`);
+    else if (health.local_llm_reachable) caps.push('Local LLM');
     $('sidebarCapabilities').textContent = caps.join(' · ');
     $('healthPill').innerHTML = `<i></i> ${escapeHtml(caps.slice(0, 2).join(' · ').toUpperCase())}`;
+
+    updateGeminiPill(Boolean(health.gemini_configured), health.gemini_model || 'gemini-2.5-flash');
   } catch (_) {
     $('sidebarCapabilities').textContent = 'Local workflow active';
+  }
+}
+
+function updateGeminiPill(connected, model) {
+  const btn = $('geminiStatusBtn');
+  if (!btn) return;
+  btn.classList.toggle('connected', connected);
+  btn.textContent = connected ? `✦ Gemini · ${model}` : '✦ Connect Gemini AI';
+  const select = $('geminiModelSelect');
+  if (select && [...select.options].some((o) => o.value === model)) {
+    select.value = model;
   }
 }
 
@@ -578,8 +592,9 @@ async function applyChatResult(result) {
   addMessage('agent', result.response);
   $('sentimentChip').textContent = result.sentiment.toUpperCase();
   $('sentimentChip').className = `sentiment-chip ${result.sentiment}`;
-  $('conversationLanguage').textContent =
-    result.detected_language === 'hi-IN' ? 'Hindi / Hinglish' : $('speechLanguage').selectedOptions[0].text;
+  const langLabel = result.detected_language === 'hi-IN' ? 'Hindi / Hinglish' : $('speechLanguage').selectedOptions[0].text;
+  const modeLabel = result.response_mode === 'gemini_assisted' ? ' · Gemini AI' : result.response_mode === 'local_model_assisted' ? ' · Local LLM' : '';
+  $('conversationLanguage').textContent = `${langLabel}${modeLabel}`;
 
   if (result.handoff_required) showToast(`Human handoff flagged: ${result.handoff_reason}`);
   else if (result.appointment_booked) showToast('Demo appointment booked!');
@@ -1462,6 +1477,76 @@ $('refreshButton').addEventListener('click', () =>
 $('newLeadScroll').addEventListener('click', () =>
   $('createLeadPanel').scrollIntoView({ behavior: 'smooth' }),
 );
+
+/* ─── Gemini Configuration Modal ────────────────────────────────────── */
+function openGeminiModal() {
+  $('geminiStatusMsg').textContent = '';
+  $('geminiModal').hidden = false;
+  setTimeout(() => $('geminiKeyInput').focus(), 40);
+}
+function closeGeminiModal() {
+  $('geminiModal').hidden = true;
+}
+
+$('geminiStatusBtn')?.addEventListener('click', openGeminiModal);
+$('closeGeminiModal')?.addEventListener('click', closeGeminiModal);
+$('geminiModal')?.addEventListener('click', (e) => {
+  if (e.target === $('geminiModal')) closeGeminiModal();
+});
+$('geminiForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const apiKey = $('geminiKeyInput').value.trim();
+  const model = $('geminiModelSelect').value;
+  if (!apiKey) {
+    $('geminiStatusMsg').style.color = '#dc3f59';
+    $('geminiStatusMsg').textContent = 'Paste your Gemini API key first (starts with AIza...).';
+    return;
+  }
+  const btn = $('saveGeminiBtn');
+  btn.disabled = true;
+  btn.textContent = 'Verifying…';
+  $('geminiStatusMsg').style.color = '#64748b';
+  $('geminiStatusMsg').textContent = 'Testing connection to Gemini API…';
+  try {
+    const res = await api('/api/settings/gemini', {
+      method: 'POST',
+      body: JSON.stringify({ api_key: apiKey, model }),
+    });
+    updateGeminiPill(res.gemini_configured, res.gemini_model);
+    await loadCapabilities();
+    $('geminiKeyInput').value = '';
+    $('geminiStatusMsg').style.color = '#129466';
+    $('geminiStatusMsg').textContent = res.message;
+    showToast(`Gemini connected (${res.gemini_model}).`);
+    setTimeout(closeGeminiModal, 900);
+  } catch (err) {
+    $('geminiStatusMsg').style.color = '#dc3f59';
+    $('geminiStatusMsg').textContent = err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Verify & Save';
+  }
+});
+$('disconnectGeminiBtn')?.addEventListener('click', async () => {
+  const btn = $('disconnectGeminiBtn');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/settings/gemini', {
+      method: 'POST',
+      body: JSON.stringify({ api_key: '', model: $('geminiModelSelect').value }),
+    });
+    updateGeminiPill(false, res.gemini_model);
+    await loadCapabilities();
+    $('geminiKeyInput').value = '';
+    showToast('Switched back to deterministic local mode.');
+    closeGeminiModal();
+  } catch (err) {
+    $('geminiStatusMsg').style.color = '#dc3f59';
+    $('geminiStatusMsg').textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 document.querySelectorAll('.nav-link').forEach((link) =>
   link.addEventListener('click', (e) => {

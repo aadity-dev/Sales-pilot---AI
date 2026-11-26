@@ -17,7 +17,7 @@ flowchart TD
     AG --> BOOK[Conversational & calendar booking]
     AG --> RAG[Local TF-IDF retrieval]
     RAG --> KB[Markdown / text knowledge base]
-    AG --> LLM[Optional local OpenAI-compatible model]
+    AG --> LLM[Optional Gemini / Local OpenAI-compatible LLM]
     TURN --> TTS[Local macOS say WAV / browser speechSynthesis]
     UI -->|Web Audio AnalyserNode| ORB[60fps Voice Orb Visualizer]
     AG --> DB[(SQLite CRM / evidence / calls / bookings)]
@@ -30,7 +30,7 @@ flowchart TD
 2. **Evidence is first-class data.** Every extracted field is stored with its transcript quote, field name, status, and confidence. The UI displays this relationship in the Evidence Ledger. An optional local model may supplement rule-based extraction only when it supplies a verbatim quote present in the customer message.
 3. **Unknown is a valid answer.** Retrieval returns source passages from `knowledge_base/`. If there is no sufficient lexical match, the agent declines to guess and flags a human follow-up.
 4. **Local-first continuous voice pipeline.** Continuous browser Voice Activity Detection (VAD) pairs with single-roundtrip `/api/voice/turn` (Whisper.cpp STT -> Agent -> macOS `say` WAV TTS) so audio stays on the machine with minimal turnaround latency. Browser Web Speech API and `speechSynthesis` act as zero-config fallbacks when local binaries are absent.
-5. **Provider boundaries are explicit.** Speech recognition, speech synthesis, and local LLM adapters live in isolated modules (`voice.py`, `local_llm.py`) and are not required for CRM, booking, or scoring tests.
+5. **Provider boundaries are explicit.** Speech recognition, speech synthesis, and LLM adapters (Gemini REST API / local OpenAI-compatible server) live in isolated modules (`voice.py`, `local_llm.py`) and are not required for CRM, booking, or scoring tests.
 
 ## Data flow
 

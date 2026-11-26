@@ -41,6 +41,11 @@ class TTSRequest(BaseModel):
     language: str = Field(default="en-IN", max_length=20)
 
 
+class GeminiConfigRequest(BaseModel):
+    api_key: str = Field(default="", max_length=256)
+    model: str = Field(default="gemini-2.5-flash", min_length=1, max_length=80)
+
+
 class ModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: bool = False

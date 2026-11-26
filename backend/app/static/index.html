@@ -39,6 +39,7 @@
       <header class="topbar">
         <div class="breadcrumb">Workspace <span>/</span> Live Sales Voice Studio</div>
         <div class="topbar-right">
+          <button type="button" class="gemini-pill" id="geminiStatusBtn" title="Configure Google Gemini API key">✦ Connect Gemini AI</button>
           <span class="local-pill" id="healthPill"><i></i> LOCAL VOICE READY</span>
           <span class="avatar" title="SalesPilot Workspace">A</span>
         </div>
@@ -327,6 +328,35 @@
         <a href="/docs" target="_blank">API documentation ↗</a>
       </footer>
     </main>
+  </div>
+  <div class="modal-backdrop" id="geminiModal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="geminiModalTitle">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">CONVERSATIONAL INTELLIGENCE</p>
+          <h3 id="geminiModalTitle">Connect Google Gemini LLM</h3>
+        </div>
+        <button type="button" class="modal-close" id="closeGeminiModal" aria-label="Close">✕</button>
+      </div>
+      <p class="modal-desc">Enable natural English &amp; Hinglish voice replies powered by Gemini. Lead scoring, verbatim evidence verification, and RAG citations remain deterministic.</p>
+      <form id="geminiForm" class="form-stack">
+        <label>Gemini API Key
+          <input type="password" id="geminiKeyInput" placeholder="AIzaSy…" autocomplete="off" />
+        </label>
+        <label>Model
+          <select id="geminiModelSelect" class="select-control">
+            <option value="gemini-2.5-flash">gemini-2.5-flash (Fast · Recommended for Voice)</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro (Higher Reasoning)</option>
+            <option value="gemini-2.0-flash">gemini-2.0-flash (Legacy Fast)</option>
+          </select>
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="button button-quiet" id="disconnectGeminiBtn">Use Local Only</button>
+          <button type="submit" class="button button-primary" id="saveGeminiBtn">Verify &amp; Save</button>
+        </div>
+      </form>
+      <div class="form-message" id="geminiStatusMsg"></div>
+    </div>
   </div>
   <div class="toast" id="toast" role="status"></div>
   <script src="/static/app.js"></script>

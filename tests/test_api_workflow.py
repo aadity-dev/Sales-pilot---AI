@@ -158,3 +158,64 @@ def test_conversational_demo_booking_and_knowledge_documents(client):
 
     detail = client.get(f"/api/leads/{lead_id}").json()
     assert len(detail["appointments"]) >= 1
+
+
+def test_gemini_configuration_and_chat_workflow(client, monkeypatch):
+    import json
+
+    class FakeResp:
+        def __init__(self, body: dict):
+            self._data = json.dumps(body).encode("utf-8")
+
+        def read(self):
+            return self._data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(req, timeout=10.0):
+        if req.get_method() == "GET":
+            return FakeResp({"displayName": "Gemini 2.5 Flash"})
+        return FakeResp({
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "text": json.dumps({
+                            "answer": "Great, half a lakh works! When do you want to launch?",
+                            "facts": [
+                                {"field": "requirement", "value": "WhatsApp order support", "quote": "WhatsApp order support"},
+                                {"field": "budget_amount", "value": 50000, "quote": "half a lakh"},
+                            ],
+                        })
+                    }]
+                }
+            }]
+        })
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    saved = client.post("/api/settings/gemini", json={"api_key": "AIza-fake-key", "model": "gemini-2.5-flash"})
+    assert saved.status_code == 200
+    assert saved.json()["gemini_configured"] is True
+
+    health = client.get("/api/health").json()
+    assert health["gemini_configured"] is True
+    assert health["gemini_model"] == "gemini-2.5-flash"
+
+    lead_id = client.post("/api/leads", json={"name": "Meera Nair"}).json()["id"]
+    chat = client.post("/api/agent/chat", json={
+        "lead_id": lead_id,
+        "message": "We handle WhatsApp order support and can spend half a lakh.",
+    })
+    assert chat.status_code == 200
+    payload = chat.json()
+    assert payload["response_mode"] == "gemini_assisted"
+    assert payload["lead"]["score"] == 50  # 25 requirement + 25 budget (deterministic!)
+    assert payload["lead"]["status"] == "warm"
+
+    cleared = client.post("/api/settings/gemini", json={"api_key": "", "model": "gemini-2.5-flash"})
+    assert cleared.status_code == 200
+    assert cleared.json()["gemini_configured"] is False

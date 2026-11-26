@@ -7,7 +7,15 @@ from zoneinfo import ZoneInfo
 
 from ..db import connect, new_id, utc_now
 from .knowledge import retrieve
-from .local_llm import extract_verified_facts, generate_conversational_reply, generate_grounded_answer
+from .local_llm import (
+    active_llm_provider,
+    extract_verified_facts,
+    generate_grounded_answer,
+    generate_handoff_reply,
+    generate_smart_sales_turn,
+    is_gemini_configured,
+    is_llm_configured,
+)
 from .scoring import score_lead
 from .voice import format_for_speech
 
@@ -305,10 +313,10 @@ def wants_human(message: str) -> bool:
 
 
 def is_knowledge_question(message: str) -> bool:
-    lower = message.lower()
+    lower = message.lower().strip()
     terms = [
         "price", "pricing", "cost", "how much", "feature", "integrat", "shopify",
-        "product", "plan", "support", "language", "security", "data", "does your",
+        "plan", "language", "security", "privacy", "does your",
         "do you offer", "can your", "what are you", "what do you", "what can you",
         "what are we", "what will you", "what is salespilot", "what is this",
     ]
@@ -317,16 +325,21 @@ def is_knowledge_question(message: str) -> bool:
         for term in [
             "salespilot", "your product", "your platform", "your system",
             "you offer", "you support", "you integrate", "your pricing", "your price",
+            "your security", "data secure", "data privacy",
         ]
     )
-    capability_question = lower.strip().startswith((
+    capability_question = lower.startswith((
         "what are you", "what do you", "what can you", "what will you",
-        "what is your", "what is the", "how does", "does your", "can your",
-        "do you", "is your",
+        "what is your", "what is the", "how does", "how much", "does your", "can your",
+        "do you", "is your", "is my", "are you",
     ))
+    looks_like_question = ("?" in message) or lower.startswith(("what", "how", "does", "do ", "can ", "is ", "are ", "tell me", "explain"))
     explicit_product_term = any(term in lower for term in terms)
-    customer_need = any(term in lower for term in ["i need", "we need", "looking for", "we want", "i want", "our requirement"])
-    return capability_question or product_subject or (explicit_product_term and not customer_need)
+    customer_need = any(
+        term in lower
+        for term in ["i need", "we need", "looking for", "we want", "i want", "our requirement", "we handle", "we run", "our budget", "can spend"]
+    )
+    return capability_question or product_subject or (explicit_product_term and looks_like_question and not customer_need)
 
 
 def _upsert_evidence(conn, lead_id: str, call_id: str, field: str, value: Any, quote: str) -> None:
@@ -565,6 +578,12 @@ def process_message(
         ).fetchone()
         last_agent_message = last_agent_row[0] if last_agent_row else None
 
+        history_rows = conn.execute(
+            "SELECT role, content FROM messages WHERE call_id=? ORDER BY created_at DESC LIMIT 8",
+            (call_id,),
+        ).fetchall()
+        history = [{"role": r["role"], "text": r["content"]} for r in reversed(history_rows)]
+
         conn.execute(
             "INSERT INTO messages (id, call_id, role, content, created_at) VALUES (?, ?, 'customer', ?, ?)",
             (new_id("msg"), call_id, clean_message, utc_now()),
@@ -572,30 +591,21 @@ def process_message(
 
         facts = extract_facts(clean_message, last_agent_message=last_agent_message)
         evidence_quotes = {field: clean_message for field in facts}
-        local_model_facts = extract_verified_facts(clean_message)
-        # Rule-based extraction takes precedence. Local LLM may supplement with verbatim quote only.
-        for field, item in local_model_facts.items():
-            if field not in facts:
-                facts[field] = item["value"]
-                evidence_quotes[field] = item["quote"]
 
-        newly_captured: dict[str, Any] = {}
-        for field, value in facts.items():
-            if field in {"name", "company", "requirement", "budget_amount", "timeline_days", "decision_maker"}:
-                if lead.get(field) != value:
-                    newly_captured[field] = value
-                lead[field] = value
-                _upsert_evidence(conn, lead_id, call_id, field, value, evidence_quotes.get(field, clean_message))
+        # Run single-call LLM extraction only for knowledge/handoff/booking turns or when needed;
+        # regular conversation uses generate_smart_sales_turn() below in a single fast roundtrip.
+        def _apply_facts(extra_facts: dict[str, Any], quotes_map: dict[str, str]) -> dict[str, Any]:
+            captured: dict[str, Any] = {}
+            for field, value in extra_facts.items():
+                if field in {"name", "company", "requirement", "budget_amount", "timeline_days", "decision_maker"}:
+                    if lead.get(field) != value:
+                        captured[field] = value
+                    lead[field] = value
+                    _upsert_evidence(conn, lead_id, call_id, field, value, quotes_map.get(field, clean_message))
+            return captured
 
+        newly_captured = _apply_facts(facts, evidence_quotes)
         score, status, breakdown = score_lead(lead)
-        conn.execute(
-            """UPDATE leads SET name=?, company=?, requirement=?, budget_amount=?, timeline_days=?,
-               decision_maker=?, score=?, status=?, updated_at=? WHERE id=?""",
-            (
-                lead.get("name"), lead.get("company"), lead.get("requirement"), lead.get("budget_amount"),
-                lead.get("timeline_days"), lead.get("decision_maker"), score, status, utc_now(), lead_id,
-            ),
-        )
 
         sentiment = classify_sentiment(clean_message)
         human_request = wants_human(clean_message)
@@ -611,25 +621,17 @@ def process_message(
         citations: list[dict[str, Any]] = []
         appointment_booked: dict[str, Any] | None = None
         response = ""
-        model_used = bool(local_model_facts)
+        model_used = False
 
         first_name = (lead.get("name") or "").split()[0] if lead.get("name") else ""
 
         if handoff:
-            response = "I understand. I'll flag this conversation for a human sales representative and pass along the context so you don't have to repeat yourself."
-        elif is_greeting(clean_message) and not newly_captured:
-            if effective_lang.startswith("hi"):
-                response = f"Namaste{' ' + first_name if first_name else ''}! Main SalesPilot AI hoon. Aaj aap apne business mein kya automate karna chahte hain?"
+            llm_handoff = generate_handoff_reply(clean_message, handoff_reason, history=history, language=effective_lang)
+            if llm_handoff:
+                response = llm_handoff
+                model_used = True
             else:
-                question = _next_qualification_question(lead, effective_lang)
-                response = f"Hi{' ' + first_name if first_name else ''}! I’m SalesPilot, doing great thanks for asking. {question or 'How can I help you today?'}"
-        elif any(phrase in clean_message.lower() for phrase in ["मुझे नहीं पता", "मुझे नहीं समझ", "i don't know", "i do not know", "not sure", "pata nahi"]):
-            question = _next_qualification_question(lead, effective_lang)
-            response = (
-                f"No problem at all. We can take it one step at a time. {question}"
-                if question
-                else "No problem at all. We already have the key details — would you like me to check available demo slots?"
-            )
+                response = "I understand. I'll flag this conversation for a human sales representative and pass along the context so you don't have to repeat yourself."
         else:
             booking_reply, appointment_booked = _handle_booking_intent(conn, lead_id, clean_message, last_agent_message)
             if booking_reply:
@@ -646,7 +648,7 @@ def process_message(
                     spoken_content = re.sub(r"^#{1,6}\s+.*$", "", str(first["content"]), flags=re.MULTILINE).strip()
                     response = f"{spoken_content}\n\nSource: {first['source']}."
                     citations = [{"source": item["source"], "content": item["content"], "score": item["score"]} for item in matches]
-                    model_answer = generate_grounded_answer(clean_message, matches)
+                    model_answer = generate_grounded_answer(clean_message, matches, history=history, language=effective_lang)
                     if model_answer:
                         response = model_answer
                         model_used = True
@@ -655,22 +657,83 @@ def process_message(
                     handoff = True
                     handoff_reason = "The knowledge base did not contain verified support for the customer's question."
             else:
-                question = _next_qualification_question(lead, effective_lang)
-                ack = _acknowledge_captured_facts(newly_captured, effective_lang)
-                llm_reply = generate_conversational_reply(
-                    clean_message, lead, question, ack, language=effective_lang
-                )
-                if llm_reply:
-                    response = llm_reply
+                # Conversational sales turn: try unified Gemini/LLM turn first (single roundtrip!)
+                smart_turn = None
+                if is_llm_configured():
+                    missing = [
+                        label
+                        for key, label in [
+                            ("requirement", "business requirement"),
+                            ("budget_amount", "approximate budget in INR"),
+                            ("timeline_days", "implementation timeline"),
+                            ("decision_maker", "decision-making authority"),
+                        ]
+                        if lead.get(key) is None or lead.get(key) == ""
+                    ]
+                    next_day = _next_weekday(datetime.now(INDIA_TZ).date() + timedelta(days=1))
+                    next_slots = _available_slots_for_date(conn, next_day)
+                    slots_text = (
+                        f"{next_day.strftime('%A, %d %b')}: " + ", ".join(s["label"] for s in next_slots[:4])
+                        if next_slots
+                        else "Weekdays 10:00 AM–4:00 PM IST"
+                    )
+                    kb_chunks = conn.execute("SELECT source, content FROM knowledge_chunks LIMIT 3").fetchall()
+                    kb_summary = "\n".join(f"[{r['source']}] {r['content'][:350]}" for r in kb_chunks) or "Local SalesPilot AI sales qualification assistant."
+                    smart_turn = generate_smart_sales_turn(
+                        customer_message=clean_message,
+                        lead=lead,
+                        history=history,
+                        missing_fields=missing,
+                        next_slots_summary=slots_text,
+                        knowledge_summary=kb_summary,
+                        language=effective_lang,
+                    )
+
+                if smart_turn:
+                    llm_facts = {
+                        k: item["value"]
+                        for k, item in smart_turn["facts"].items()
+                        if k not in facts
+                    }
+                    llm_quotes = {k: item["quote"] for k, item in smart_turn["facts"].items()}
+                    if llm_facts:
+                        newly_captured.update(_apply_facts(llm_facts, llm_quotes))
+                        score, status, breakdown = score_lead(lead)
+                    response = smart_turn["answer"]
                     model_used = True
-                elif ack and question:
-                    response = f"{ack} {question}"
-                elif ack and not question:
-                    response = f"{ack} Your profile is now fully qualified at {score}/100 ({status.upper()}). Would you like to book a 30-minute demo slot?"
-                elif question:
-                    response = f"Thanks for sharing that. {question}"
+                elif is_greeting(clean_message) and not newly_captured:
+                    if effective_lang.startswith("hi"):
+                        response = f"Namaste{' ' + first_name if first_name else ''}! Main SalesPilot AI hoon. Aaj aap apne business mein kya automate karna chahte hain?"
+                    else:
+                        question = _next_qualification_question(lead, effective_lang)
+                        response = f"Hi{' ' + first_name if first_name else ''}! I’m SalesPilot, doing great thanks for asking. {question or 'How can I help you today?'}"
+                elif any(phrase in clean_message.lower() for phrase in ["मुझे नहीं पता", "मुझे नहीं समझ", "i don't know", "i do not know", "not sure", "pata nahi"]):
+                    question = _next_qualification_question(lead, effective_lang)
+                    response = (
+                        f"No problem at all. We can take it one step at a time. {question}"
+                        if question
+                        else "No problem at all. We already have the key details — would you like me to check available demo slots?"
+                    )
                 else:
-                    response = f"Thanks{' ' + first_name if first_name else ''}! We have all the key details ({score}/100). Would you like me to check available slots for a 30-minute product demonstration?"
+                    question = _next_qualification_question(lead, effective_lang)
+                    ack = _acknowledge_captured_facts(newly_captured, effective_lang)
+                    if ack and question:
+                        response = f"{ack} {question}"
+                    elif ack and not question:
+                        response = f"{ack} Your profile is now fully qualified at {score}/100 ({status.upper()}). Would you like to book a 30-minute demo slot?"
+                    elif question:
+                        response = f"Thanks for sharing that. {question}"
+                    else:
+                        response = f"Thanks{' ' + first_name if first_name else ''}! We have all the key details ({score}/100). Would you like me to check available slots for a 30-minute product demonstration?"
+
+        conn.execute(
+            """UPDATE leads SET name=?, company=?, requirement=?, budget_amount=?, timeline_days=?,
+               decision_maker=?, score=?, status=?, updated_at=? WHERE id=?""",
+            (
+                lead.get("name"), lead.get("company"), lead.get("requirement"), lead.get("budget_amount"),
+                lead.get("timeline_days"), lead.get("decision_maker"), score, status, utc_now(), lead_id,
+            ),
+        )
 
         conn.execute(
             "INSERT INTO messages (id, call_id, role, content, created_at) VALUES (?, ?, 'agent', ?, ?)",
@@ -703,7 +766,12 @@ def process_message(
         "summary": summary,
         "citations": citations,
         "appointment_booked": appointment_booked,
-        "response_mode": "local_model_assisted" if model_used else "deterministic_local",
+        "response_mode": (
+            ("gemini_assisted" if is_gemini_configured() else "local_model_assisted")
+            if model_used
+            else "deterministic_local"
+        ),
+        "llm_provider": active_llm_provider() if model_used else None,
     }
 
 

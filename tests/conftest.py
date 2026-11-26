@@ -20,7 +20,15 @@ def test_knowledge_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def client(tmp_path: Path, test_knowledge_dir: Path):
-    app = create_app(db_path=tmp_path / "salespilot-test.db", knowledge_dir=test_knowledge_dir)
+def client(tmp_path: Path, test_knowledge_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    # Ensure tests stay isolated from any real .env keys on the developer's machine.
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("SALESPILOT_LOCAL_LLM_URL", raising=False)
+    app = create_app(
+        db_path=tmp_path / "salespilot-test.db",
+        knowledge_dir=test_knowledge_dir,
+        env_path=tmp_path / ".env",
+    )
     with TestClient(app) as test_client:
         yield test_client

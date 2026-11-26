@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f4f6fb" />
+  <title>SalesPilot AI — Live Voice Sales Agent</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/">
+        <span class="brand-mark">S</span>
+        <span><strong>SalesPilot</strong><small>VOICE INTELLIGENCE</small></span>
+      </a>
+      <div class="workspace-label">WORKSPACE</div>
+      <nav class="nav-list">
+        <a class="nav-link active" href="#overview"><span>◫</span> Overview</a>
+        <a class="nav-link" href="#voice-workspace"><span>◉</span> Live voice agent</a>
+        <a class="nav-link" href="#evidence-ledger"><span>⌁</span> Evidence ledger</a>
+        <a class="nav-link" href="#lead-pipeline"><span>▤</span> Lead pipeline</a>
+        <a class="nav-link" href="#appointments"><span>▦</span> Appointments</a>
+        <a class="nav-link" href="#knowledge-base"><span>◇</span> Knowledge base</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="privacy-card">
+          <span class="privacy-dot"></span>
+          <div>
+            <strong>Local-first engine</strong>
+            <small id="sidebarCapabilities">Checking Whisper &amp; TTS…</small>
+          </div>
+        </div>
+        <div class="sidebar-foot">SALESPILOT AI · MVP 0.2.0</div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumb">Workspace <span>/</span> Live Sales Voice Studio</div>
+        <div class="topbar-right">
+          <span class="local-pill" id="healthPill"><i></i> LOCAL VOICE READY</span>
+          <span class="avatar" title="SalesPilot Workspace">A</span>
+        </div>
+      </header>
+
+      <section class="page-heading" id="overview">
+        <div>
+          <p class="eyebrow">REAL-TIME CONVERSATIONAL SALES AGENT</p>
+          <h1>Sales intelligence, <em>live by voice.</em></h1>
+          <p class="subheading">Start a hands-free voice call with SalesPilot AI. Every answer stays grounded in local docs, and every extracted fact links straight to the customer's exact words.</p>
+        </div>
+        <div class="heading-actions">
+          <button class="button button-quiet" id="refreshButton">↻ Refresh</button>
+          <button class="button button-primary" id="newLeadScroll">＋ New lead</button>
+        </div>
+      </section>
+
+      <section class="stat-grid" aria-label="Workspace metrics">
+        <article class="stat-card">
+          <div class="stat-top"><span>Total leads</span><span class="stat-icon">▤</span></div>
+          <strong id="statLeads">—</strong>
+          <small>Persisted customer records</small>
+        </article>
+        <article class="stat-card">
+          <div class="stat-top"><span>Hot leads</span><span class="stat-icon green">↗</span></div>
+          <strong id="statHot">—</strong>
+          <small>Score of 75 or higher</small>
+        </article>
+        <article class="stat-card">
+          <div class="stat-top"><span>Appointments</span><span class="stat-icon violet">▦</span></div>
+          <strong id="statAppointments">—</strong>
+          <small>Confirmed demo bookings</small>
+        </article>
+        <article class="stat-card">
+          <div class="stat-top"><span>Human handoffs</span><span class="stat-icon amber">⇢</span></div>
+          <strong id="statHandoffs">—</strong>
+          <small>Escalations for review</small>
+        </article>
+      </section>
+
+      <section class="content-grid" id="voice-workspace">
+        <article class="panel voice-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">REAL-TIME VOICE STUDIO</p>
+              <h2>Talk to SalesPilot AI</h2>
+              <p class="panel-description">One click starts a continuous two-way call — speak naturally in English or Hinglish.</p>
+            </div>
+            <span class="status-chip" id="voiceChip"><i></i> READY</span>
+          </div>
+
+          <div class="voice-toolbar">
+            <div class="toolbar-col">
+              <label class="field-label" for="leadSelect">ACTIVE CUSTOMER / LEAD</label>
+              <div class="toolbar-row">
+                <select id="leadSelect" class="select-control"></select>
+                <button class="icon-button" id="startCallButton" title="Start a fresh conversation session">＋</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tara-style Interactive Live Voice Call Stage -->
+          <div class="call-stage" id="callStage" data-state="idle">
+            <div class="call-stage-top">
+              <span class="call-badge" id="callStateBadge"><span class="pulse-dot"></span> <span id="callStateText">STANDBY</span></span>
+              <span class="call-timer" id="callTimer">00:00</span>
+            </div>
+
+            <div class="orb-wrapper">
+              <canvas id="voiceOrbCanvas" width="320" height="320" aria-label="Live AI voice activity visualizer"></canvas>
+              <div class="orb-center-label" id="orbCenterLabel">TAP CALL</div>
+            </div>
+
+            <div class="live-caption" id="liveCaption">Press <strong>Start Live Call</strong> once and just talk — no repeated clicks needed.</div>
+
+            <div class="call-controls">
+              <button class="call-btn call-btn-start" id="startVoiceCallBtn">
+                <span class="btn-icon">◉</span>
+                <span>Start Live Call</span>
+              </button>
+
+              <div class="active-call-bar" id="activeCallBar" hidden>
+                <button class="call-btn call-btn-mute" id="muteCallBtn" title="Mute or unmute microphone (M)">
+                  <span id="muteIcon">🎙</span> <span id="muteLabel">Mute</span>
+                </button>
+                <button class="call-btn call-btn-interrupt" id="interruptCallBtn" title="Interrupt AI or send spoken phrase now (Space)">
+                  <span>⚡</span> <span id="interruptLabel">Interrupt</span>
+                </button>
+                <button class="call-btn call-btn-end" id="endVoiceCallBtn" title="End live voice call">
+                  <span>■</span> <span>End Call</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="voice-settings-bar">
+              <label class="setting-pill">
+                <span>Language</span>
+                <select id="speechLanguage" aria-label="Speech language">
+                  <option value="en-IN">English (India)</option>
+                  <option value="hi-IN">Hindi / Hinglish</option>
+                  <option value="en-US">English (US)</option>
+                </select>
+              </label>
+              <label class="setting-pill">
+                <span>AI Voice</span>
+                <select id="voiceSelect" aria-label="AI voice persona">
+                  <option value="">Auto (Tara / Best)</option>
+                </select>
+              </label>
+              <label class="setting-pill">
+                <span>STT Engine</span>
+                <select id="sttEngineSelect" aria-label="Speech recognition engine">
+                  <option value="auto">Auto (Local Whisper)</option>
+                  <option value="browser">Browser Live Captions</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="voice-toggles">
+              <label class="tool-toggle"><input type="checkbox" id="speakToggle" checked /> <span>Spoken AI replies</span></label>
+              <label class="tool-toggle"><input type="checkbox" id="autoSendToggle" checked /> <span>Auto-send voice</span></label>
+              <label class="tool-toggle"><input type="checkbox" id="bargeInToggle" /> <span>Auto barge-in (headphones)</span></label>
+              <label class="tool-toggle" hidden><input type="checkbox" id="continuousVoiceToggle" checked /> <span>Hands-free</span></label>
+            </div>
+          </div>
+
+          <div class="conversation-meta">
+            <span id="callStatus">No active session</span>
+            <span class="meta-dot">·</span>
+            <span id="conversationLanguage">English (India)</span>
+            <span class="spacer"></span>
+            <span id="sentimentChip" class="sentiment-chip neutral">NEUTRAL</span>
+          </div>
+
+          <div class="transcript" id="transcript" aria-live="polite">
+            <div class="empty-transcript">
+              <div class="empty-wave">〰</div>
+              <strong>Your conversation starts here</strong>
+              <span>Start a live voice call above or type a customer message below.</span>
+            </div>
+          </div>
+
+          <div class="composer">
+            <textarea id="messageInput" rows="2" maxlength="5000" placeholder="Or type what the customer says… e.g. We need customer support automation, budget ₹50,000, within 30 days, and I am the decision maker."></textarea>
+            <div class="composer-actions">
+              <div class="composer-tools">
+                <button class="tool-button" id="recordButton" title="Record one voice clip and transcribe with local Whisper">◌ <span>One-shot Voice Clip</span></button>
+                <button class="tool-button" id="liveVoiceButton" hidden>◉ <span>Talk</span></button>
+              </div>
+              <button class="button button-primary send-button" id="sendButton">Send message <span>→</span></button>
+            </div>
+            <p class="microcopy" id="voiceNote">Tip: Press <strong>Space</strong> anytime during a call to interrupt the AI and speak immediately, or type directly above.</p>
+          </div>
+        </article>
+
+        <article class="panel lead-intel-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">LIVE QUALIFICATION</p>
+              <h2>Lead intelligence</h2>
+              <p class="panel-description">Deterministic score calculated strictly from verified transcript evidence.</p>
+            </div>
+            <span class="mini-icon">✳</span>
+          </div>
+          <div class="score-block">
+            <div>
+              <span class="muted-label">QUALIFICATION SCORE</span>
+              <div class="score-line">
+                <strong id="leadScore">0</strong>
+                <span>/ 100</span>
+                <span id="leadStatus" class="lead-status cold">COLD</span>
+              </div>
+            </div>
+            <div class="score-ring" id="scoreRing">
+              <div><strong id="ringScore">0</strong><small>POINTS</small></div>
+            </div>
+          </div>
+          <div class="score-progress"><span id="scoreProgress"></span></div>
+          <div class="score-list" id="scoreBreakdown"><div class="muted-empty">Select a lead to view qualification criteria.</div></div>
+          <div class="lead-summary">
+            <span class="muted-label">RECOMMENDED NEXT STEP</span>
+            <p id="nextStep">Start a conversation to collect the customer's business requirement.</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="content-grid secondary-grid" id="evidence-ledger">
+        <article class="panel evidence-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">TRACEABLE CUSTOMER FACTS</p>
+              <h2>Evidence ledger</h2>
+              <p class="panel-description">Every extracted CRM field links directly back to the customer's exact quote.</p>
+            </div>
+            <span class="count-pill" id="evidenceCount">0 facts</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>FIELD</th><th>CAPTURED VALUE</th><th>TRANSCRIPT EVIDENCE</th><th>STATE</th></tr></thead>
+              <tbody id="evidenceTable"><tr><td colspan="4" class="table-empty">No verified facts yet. Start a conversation to create evidence.</td></tr></tbody>
+            </table>
+          </div>
+          <div class="evidence-note"><span>ⓘ</span> Only explicitly stated customer facts are marked verified. Missing information earns zero points.</div>
+        </article>
+
+        <article class="panel create-lead-panel" id="createLeadPanel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">PIPELINE INPUT</p>
+              <h2>Create a lead</h2>
+              <p class="panel-description">Add a synthetic customer profile for your live demo.</p>
+            </div>
+          </div>
+          <form id="createLeadForm" class="form-stack">
+            <label>Name<input required name="name" placeholder="e.g. Priya Sharma" maxlength="120" /></label>
+            <label>Company<input name="company" placeholder="e.g. Acme Systems" maxlength="160" /></label>
+            <div class="form-two">
+              <label>Email<input name="email" type="email" placeholder="name@company.com" /></label>
+              <label>Phone<input name="phone" placeholder="+91…" /></label>
+            </div>
+            <button class="button button-outline" type="submit">Create customer record <span>＋</span></button>
+          </form>
+          <div class="form-message" id="createLeadMessage"></div>
+        </article>
+      </section>
+
+      <section class="panel pipeline-panel" id="lead-pipeline">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">CUSTOMER RELATIONSHIP MANAGEMENT</p>
+            <h2>Lead pipeline</h2>
+            <p class="panel-description">Click any lead row to switch the active voice session and inspect their evidence.</p>
+          </div>
+          <span class="count-pill" id="leadCount">0 leads</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>LEAD</th><th>COMPANY</th><th>REQUIREMENT</th><th>SCORE</th><th>STATUS</th><th>UPDATED</th></tr></thead>
+            <tbody id="leadTable"><tr><td colspan="6" class="table-empty">No leads found.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="content-grid secondary-grid" id="appointments">
+        <article class="panel appointments-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">SALES FOLLOW-UP</p>
+              <h2>Appointment booking</h2>
+              <p class="panel-description">Conflict-checked local demo calendar (India Standard Time) — also bookable by voice!</p>
+            </div>
+            <span class="mini-icon">▦</span>
+          </div>
+          <div class="booking-form">
+            <label class="field-label" for="bookingDate">SELECT DATE</label>
+            <input id="bookingDate" class="input-control" type="date" />
+            <div class="field-label slot-label">AVAILABLE DEMO SLOTS</div>
+            <div id="slotGrid" class="slot-grid"><span class="muted-empty">Choose a date to load available times.</span></div>
+            <button class="button button-primary full-button" id="bookButton" disabled>Confirm appointment <span>→</span></button>
+            <p class="microcopy" id="bookingMessage">Appointments are stored in the local SQLite database with conflict checks.</p>
+          </div>
+          <div class="upcoming-list" id="upcomingAppointments"></div>
+        </article>
+
+        <article class="panel knowledge-panel" id="knowledge-base">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">GROUNDED ANSWERS</p>
+              <h2>Knowledge base</h2>
+              <p class="panel-description">Local TF-IDF document retrieval with source citations.</p>
+            </div>
+            <span class="mini-icon">◇</span>
+          </div>
+          <form id="knowledgeSearchForm" class="search-row">
+            <input id="knowledgeQuery" class="input-control" placeholder="Search pricing, integrations, security…" />
+            <button class="button button-outline" type="submit">Search</button>
+          </form>
+          <div id="knowledgeResults" class="knowledge-results"></div>
+          <button class="text-button" id="reloadKnowledgeButton">↻ Re-index knowledge documents</button>
+        </article>
+      </section>
+
+      <footer class="footer">
+        <span>SalesPilot AI · MVP 0.2.0</span>
+        <span>Local-first · Voice-first · Evidence-linked</span>
+        <a href="/docs" target="_blank">API documentation ↗</a>
+      </footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

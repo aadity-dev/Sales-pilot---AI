@@ -18,7 +18,7 @@ Inbound sales teams lose qualified leads when slow follow-ups, ungrounded AI cha
 | **Live Voice Studio** | `index.html`, `styles.css`, `app.js` | Persistent echo-cancelled mic + adaptive VAD turns (`LISTENING → THINKING → SPEAKING → LISTENING`) driving a 60fps Web Audio `AnalyserNode` orb, Mute (`M`), and instant Interrupt (`Space`). |
 | **Speech Pipeline** | `backend/app/services/voice.py` | Single-roundtrip `POST /api/voice/turn` (FFmpeg 16 kHz WAV → `whisper-cli` STT → Agent → macOS `say` WAV TTS) with automatic browser `SpeechRecognition` / `speechSynthesis` fallback. |
 | **Conversational Core** | `agent.py`, `local_llm.py` | Context-aware rules + optional **Gemini (`gemini-3.1-flash-lite` → `gemini-3.5-flash-lite` fallback)** for multi-turn English/Hinglish dialogue; LLM-extracted facts require a verbatim quote in `validate_fact_payload()`. |
-| **Scoring & CRM** | `scoring.py`, `db.py` | Deterministic `0–100` BANT-style rubric (Requirement 25, Budget ≥₹50,000 25, Timeline ≤30d 25, Decision-maker 25; Hot ≥75, Warm ≥50). LLMs never set scores or write bookings directly. |
+| **Scoring, Summary & CRM** | `scoring.py`, `db.py`, `main.py` | Deterministic `0–100` BANT-style rubric (Requirement 25, Budget ≥₹50,000 25, Timeline ≤30d 25, Decision-maker 25; Hot ≥75, Warm ≥50), live per-call summaries (`calls.summary`), and pipeline business insights (`avg_score`, `hot_rate_pct`, sentiment mix, top demand topics). |
 | **Grounded RAG & Booking** | `knowledge.py`, `main.py` | TF-IDF lexical retrieval (`knowledge_base/*.md`) + `GET /api/knowledge/search` Gemini grounded synthesis (`✦ Gemini Grounded Answer`); unknown queries escalate instead of guessing. Weekday IST booking enforces overlap checks + idempotency keys. |
 
 ---

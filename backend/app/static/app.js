@@ -425,6 +425,14 @@ async function loadStats() {
   $('statHot').textContent = s.hot_leads;
   $('statAppointments').textContent = s.appointments_booked;
   $('statHandoffs').textContent = s.human_handoffs;
+  $('insightAvgScore').textContent = `${s.avg_score ?? 0} / 100`;
+  $('insightHotRate').textContent = `${s.hot_rate_pct ?? 0}% (${s.hot_leads}/${s.total_leads})`;
+  const sb = s.sentiment_breakdown || { positive: 0, neutral: 0, negative: 0 };
+  $('insightSentiment').textContent = `${sb.positive} pos · ${sb.neutral} neu · ${sb.negative} neg`;
+  const reqs = s.top_requirements || [];
+  $('insightTopNeeds').innerHTML = reqs.length
+    ? reqs.map((r) => `<span class="insight-chip">${escapeHtml(r.requirement)} (${r.count})</span>`).join('')
+    : '<span class="muted-empty">Capturing demand signals…</span>';
 }
 
 async function renderLeadDetail() {
@@ -489,11 +497,14 @@ async function renderLeadDetail() {
       $('callStatus').textContent = `Session ${latestCall.id.slice(-6)}`;
       $('sentimentChip').textContent = (latestCall.sentiment || 'neutral').toUpperCase();
       $('sentimentChip').className = `sentiment-chip ${latestCall.sentiment || 'neutral'}`;
+      $('callSummary').textContent = latestCall.summary || 'Conversation started; collecting qualification facts.';
       $('transcript').innerHTML = '';
       data.latest_messages.forEach((m) => {
         const timeStr = new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         addMessage(m.role, m.content, timeStr);
       });
+    } else if (!state.callId) {
+      $('callSummary').textContent = 'No call summary yet. Start a conversation to generate a structured summary.';
     }
 
     renderAppointments(data.appointments);
@@ -592,6 +603,9 @@ async function applyChatResult(result) {
   addMessage('agent', result.response);
   $('sentimentChip').textContent = result.sentiment.toUpperCase();
   $('sentimentChip').className = `sentiment-chip ${result.sentiment}`;
+  if (result.summary) {
+    $('callSummary').textContent = result.summary;
+  }
   const langLabel = result.detected_language === 'hi-IN' ? 'Hindi / Hinglish' : $('speechLanguage').selectedOptions[0].text;
   const modeLabel = result.response_mode === 'gemini_assisted' ? ' · Gemini AI' : result.response_mode === 'local_model_assisted' ? ' · Local LLM' : '';
   $('conversationLanguage').textContent = `${langLabel}${modeLabel}`;

@@ -148,10 +148,43 @@ def create_app(
         with connect(app.state.db_path) as conn:
             leads = conn.execute("SELECT COUNT(*) FROM leads").fetchone()[0]
             hot = conn.execute("SELECT COUNT(*) FROM leads WHERE status='hot'").fetchone()[0]
+            warm = conn.execute("SELECT COUNT(*) FROM leads WHERE status='warm'").fetchone()[0]
+            avg_score_row = conn.execute("SELECT AVG(score) FROM leads").fetchone()[0]
+            avg_score = round(float(avg_score_row), 1) if avg_score_row is not None else 0.0
             booked = conn.execute("SELECT COUNT(*) FROM appointments WHERE status='booked'").fetchone()[0]
             calls = conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0]
             handoffs = conn.execute("SELECT COUNT(*) FROM calls WHERE handoff_required=1").fetchone()[0]
-        return {"total_leads": leads, "hot_leads": hot, "appointments_booked": booked, "calls": calls, "human_handoffs": handoffs}
+            top_reqs = [
+                {"requirement": row["requirement"], "count": row["cnt"]}
+                for row in conn.execute(
+                    """SELECT requirement, COUNT(*) AS cnt FROM leads
+                       WHERE requirement IS NOT NULL AND TRIM(requirement) != ''
+                       GROUP BY LOWER(requirement) ORDER BY cnt DESC LIMIT 3"""
+                ).fetchall()
+            ]
+            sent_rows = conn.execute(
+                "SELECT sentiment, COUNT(*) AS cnt FROM calls GROUP BY sentiment"
+            ).fetchall()
+            sentiments = {"positive": 0, "neutral": 0, "negative": 0}
+            for row in sent_rows:
+                key = (row["sentiment"] or "neutral").lower()
+                if key in sentiments:
+                    sentiments[key] += row["cnt"]
+        hot_rate_pct = round((hot / leads) * 100, 1) if leads else 0.0
+        booking_rate_pct = round((booked / leads) * 100, 1) if leads else 0.0
+        return {
+            "total_leads": leads,
+            "hot_leads": hot,
+            "warm_leads": warm,
+            "avg_score": avg_score,
+            "hot_rate_pct": hot_rate_pct,
+            "booking_rate_pct": booking_rate_pct,
+            "appointments_booked": booked,
+            "calls": calls,
+            "human_handoffs": handoffs,
+            "top_requirements": top_reqs,
+            "sentiment_breakdown": sentiments,
+        }
 
     @app.get("/api/leads")
     def list_leads() -> list[dict[str, Any]]:

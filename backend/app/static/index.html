@@ -80,6 +80,25 @@
         </article>
       </section>
 
+      <section class="insights-strip" id="businessInsights" aria-label="Business insights">
+        <div class="insight-item">
+          <span class="muted-label">AVG QUALIFICATION</span>
+          <strong id="insightAvgScore">0 / 100</strong>
+        </div>
+        <div class="insight-item">
+          <span class="muted-label">HOT LEAD RATE</span>
+          <strong id="insightHotRate">0%</strong>
+        </div>
+        <div class="insight-item">
+          <span class="muted-label">CALL SENTIMENT MIX</span>
+          <strong id="insightSentiment">0 pos · 0 neu · 0 neg</strong>
+        </div>
+        <div class="insight-item insight-topics">
+          <span class="muted-label">TOP CUSTOMER NEEDS</span>
+          <div id="insightTopNeeds" class="insight-chips"><span class="muted-empty">Capturing demand signals…</span></div>
+        </div>
+      </section>
+
       <section class="content-grid" id="voice-workspace">
         <article class="panel voice-panel">
           <div class="panel-heading">
@@ -222,6 +241,10 @@
           <div class="lead-summary">
             <span class="muted-label">RECOMMENDED NEXT STEP</span>
             <p id="nextStep">Start a conversation to collect the customer's business requirement.</p>
+          </div>
+          <div class="lead-summary call-summary-box">
+            <span class="muted-label">LIVE CALL SUMMARY</span>
+            <p id="callSummary">No call summary yet. Start a conversation to generate a structured summary.</p>
           </div>
         </article>
       </section>

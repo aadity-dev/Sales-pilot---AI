@@ -9,6 +9,9 @@ def test_health_and_dashboard(client):
     assert health.json()["mode"] == "local-first"
     stats = client.get("/api/dashboard/stats").json()
     assert stats["total_leads"] == 1  # seeded synthetic demo lead
+    assert "avg_score" in stats
+    assert "sentiment_breakdown" in stats
+    assert "top_requirements" in stats
 
 
 def test_full_qualification_evidence_and_handoff_workflow(client):

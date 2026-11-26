@@ -4,9 +4,10 @@
 
 - Intended for localhost development and evaluator demonstration.
 - No authentication or multi-tenant authorization is implemented.
-- SQLite records are stored unencrypted in `data/salespilot.db` by default.
+- SQLite records are stored unencrypted in `data/salespilot.db` by default (excluded from git via `.gitignore`).
 - The browser UI uses same-origin local API calls. No third-party analytics or hosted AI API is called by default.
-- Optional local model requests go to the operator-configured local endpoint; optional transcription runs the configured local Whisper.cpp executable.
+- Local Whisper.cpp transcription, macOS native `say` speech synthesis, and optional local OpenAI-compatible model endpoints run on the operator's machine. Browser Web Speech API fallback (if chosen in the UI) follows the browser vendor's speech privacy policy.
+- Secrets (`.env`), runtime databases (`data/*.db`), and large local model files (`models/*.bin`) are excluded via `.gitignore`.
 - Use only synthetic lead information and fabricated transcripts during development and evaluation.
 
 ## Before real customer use

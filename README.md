@@ -10,21 +10,22 @@ The project stays transparent about its implementation: the conversational core 
 
 ## What works in this MVP
 
-- **Live Voice Call Studio**: One-click continuous voice call with an interactive Web Audio voice orb visualizer, call timer, mic mute/unmute, Spacebar / button barge-in interruption, and live captions.
-- **Fast Local Speech Pipeline**: Local Whisper.cpp speech-to-text (`/api/voice/turn` single-roundtrip STT + agent + TTS) and macOS native `say` WAV synthesis (`/api/voice/tts`) with automatic browser fallback.
-- **SQLite CRM & Transcript Hydration**: Synthetic demo lead, persisted calls, auto-restored transcripts, clickable Lead Pipeline rows, evidence ledger, and appointments with cancellation.
-- **Context-Aware Fact Extraction & Evidence Ledger**: Extracts requirement, budget (including Indian formats like `50k`, `50 hazaar`, `1.5 lakhs`, `₹50,000`), timeline, and decision-maker status (including contextual yes/no answers), linking every field to the customer's exact quote.
+- **Live Voice Call Studio**: One-click **Start Live Call** continuous conversation with a 60fps Web Audio reactive voice orb, live call timer, mic Mute/Unmute (`M`), instant Interrupt / Send Now (`Space`), and live captions.
+- **Single-Roundtrip Local Speech Pipeline**: `POST /api/voice/turn` combines local Whisper.cpp speech-to-text, agent processing, and macOS `say` WAV synthesis (`POST /api/voice/tts`) with automatic browser Web Speech / `speechSynthesis` fallback.
+- **SQLite CRM & Transcript Hydration**: Synthetic demo lead, persisted calls, auto-restored transcripts, clickable Lead Pipeline rows, Evidence Ledger, and appointments with cancellation.
+- **Context-Aware Fact Extraction & Evidence Ledger**: Extracts requirement, budget (including Indian formats like `50k`, `50 hazaar`, `1.5 lakhs`, `₹50,000`), timeline (`next month`, `agle hafte`, `asap`), and decision-maker status (including contextual yes/no answers), linking every field to the customer's exact quote.
 - **Explainable 0–100 Qualification Score**: Deterministic scoring rubric with criterion-level breakdown and recommended next step.
 - **Grounded Local RAG**: Document chunking and TF-IDF lexical retrieval with source citations; escalates to a human when no verified passage supports the question.
-- **Conversational & Calendar Appointment Booking**: Book weekday IST demo slots either by voice/chat (*"Book a demo tomorrow at 11 AM"*) or through the conflict-checked calendar widget.
-- **Optional Local LLM Adapter**: Supports an OpenAI-compatible local endpoint (e.g., Ollama / LM Studio) for phrasing answers while keeping scoring, evidence, and bookings deterministic.
+- **Conversational & Calendar Appointment Booking**: Book weekday IST demo slots either by voice/chat (*"Can you book a demo for tomorrow at 11 AM?"*) or through the conflict-checked calendar widget.
+- **Optional Local LLM Adapter**: Supports an OpenAI-compatible local endpoint (e.g., Ollama or LM Studio) for conversational phrasing while keeping scoring, evidence, and bookings deterministic.
 
 ## Quick start on macOS
 
-1. Open Terminal and move into the project folder:
+1. Clone the repository and enter the project folder:
 
    ```bash
-   cd salespilot_ai
+   git clone https://github.com/aadity-dev/Sales-pilot---AI.git
+   cd Sales-pilot---AI
    ```
 
 2. Run the launcher:
@@ -38,6 +39,8 @@ The project stays transparent about its implementation: the conversational core 
 3. Open [http://127.0.0.1:8008](http://127.0.0.1:8008) (or set `PORT=8000 ./run.sh`).
 4. Select **Rahul Sharma** or create a new lead, then click **Start Live Call**!
 
+To stop the server, press `Control+C` in Terminal. A double-clickable `run.command` is also included for macOS.
+
 ### Manual setup
 
 ```bash
@@ -45,31 +48,30 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8008
 ```
 
 ## Five-minute demo script
 
-1. Select **Rahul Sharma** or create a lead such as `Priya Sharma / Acme Systems`.
-2. Click the plus button beside the customer selector to start a conversation.
-3. Paste or type this customer statement:
+1. Select **Rahul Sharma** or create a new lead such as `Priya Sharma / Acme Systems`.
+2. **Voice call path**: Click **Start Live Call**, allow microphone access once, and speak naturally across turns (or press `Space` anytime to interrupt the AI and speak immediately, and `M` to mute).
+3. **Typed / quick verification path**: Paste or speak this customer statement:
 
    ```text
    Hi, my name is Priya Sharma. I work at Acme Systems. We need customer support automation. Our budget is ₹50,000, we want to implement it within 30 days, and I am the decision maker.
    ```
 
-4. The application should capture the requirement, budget, timeline, and decision-maker status. The deterministic scoring rubric should show 100/100 for this example.
+4. The application captures requirement, budget, timeline, and decision-maker status in the Evidence Ledger and calculates a deterministic **100/100 (HOT)** score.
 5. Ask:
 
    ```text
    Does your product integrate with Shopify?
    ```
 
-   The sample product FAQ says that Shopify integration is not confirmed. SalesPilot should cite the sample FAQ passage instead of inventing a yes/no claim.
-
-6. Ask an unrelated unsupported question, such as `Do you have a certified satellite launch capability?`. The agent should decline to guess and recommend a human follow-up.
+   The sample product FAQ says that native Shopify integration is not confirmed. SalesPilot cites `product_faq.md` instead of inventing a yes/no claim.
+6. Ask an unrelated unsupported question, such as `What is your certified satellite launch capability?`. The agent declines to guess and flags a human follow-up.
 7. Say `I am frustrated and want to talk to a human sales representative.` to demonstrate negative-sentiment escalation.
-8. Choose a future weekday, select an available demo slot, and confirm the appointment. Try booking the same slot again with a different idempotency key to see the conflict response.
+8. Ask by voice/text `"Can you book a demo for tomorrow at 11 AM?"` (or pick a weekday slot in **Appointment booking**). Try booking the same slot again with a different idempotency key to see conflict prevention (`409`).
 
 The knowledge-base files are fictional demonstration content. Do not present their prices or capabilities as real products.
 
@@ -92,21 +94,33 @@ Tests use a temporary SQLite database and synthetic product documentation. They 
 
 ## Voice setup (optional, local)
 
-### Low-cost real-time voice path
+### Continuous Live Call & Speech Engines
 
-For the interview demo, press **Live voice**, speak, and let the final transcript auto-send. The browser provides interim captions while you speak; SalesPilot sends only the final utterance to the backend, then speaks the agent reply with browser TTS. This has **no per-minute STT or TTS API bill to SalesPilot**.
+SalesPilot supports two speech-to-text paths inside **Start Live Call** (selectable via **STT Engine**):
 
-This is a cost-first prototype path, not a privacy guarantee: browser speech recognition may be processed by the browser vendor or its configured service. Use Chrome or Edge for the most reliable support and obtain consent before capturing customer speech. If it is unavailable, use the typed flow or the local Whisper.cpp fallback below.
+1. **Auto / Local Whisper (Recommended on macOS)**: Keeps a persistent echo-cancelled microphone stream open during the call, calibrates room noise, slices speech turns via browser VAD without clipping the first word, and calls `POST /api/voice/turn` for local Whisper transcription + agent logic + local WAV speech synthesis in one roundtrip.
+2. **Browser Live Captions**: Uses the browser's Web Speech API (`SpeechRecognition`) for interim live captions and automatically falls back to Local Whisper if the browser speech service returns a `network` or availability error.
+
+Outside a live call, **One-shot Voice Clip** records a single utterance, transcribes it with Whisper.cpp, and populates the message composer.
 
 ### Text-to-speech
 
-The dashboard uses the browser's built-in `speechSynthesis` API. It does not require a paid TTS provider. Available voices depend on the browser and voices installed on the operating system. Spoken replies can be switched off in the dashboard.
+- On **macOS**, `POST /api/voice/tts` uses native `/usr/bin/say` voices (**Tara**, **Aman**, **Rishi**, **Lekha**, **Samantha**, **Daniel**) to produce WAV audio streamed through a Web Audio `AnalyserNode` so the Voice Orb animates in real time with the AI's voice.
+- On **Linux / Windows** (or when local TTS is unavailable), the dashboard seamlessly falls back to the browser's `speechSynthesis` API. Spoken replies can be toggled off anytime in the Voice Studio.
 
 ### Speech-to-text with Whisper.cpp
 
-The **Local record** button records audio in the browser. It converts the browser's WebM recording to a 16 kHz mono WAV with FFmpeg before sending it to Whisper.cpp. Actual transcription requires a local Whisper.cpp binary and a compatible model file; neither a binary nor model weights are bundled here. It is slower than Live voice but keeps transcription on your own machine once configured.
+Local transcription requires `ffmpeg`, a `whisper.cpp` binary (`whisper-cli`), and a compatible GGML model file (model weights are excluded from git via `.gitignore`).
 
-On macOS, one possible setup is:
+On macOS:
+
+```bash
+brew install cmake ffmpeg whisper-cpp
+mkdir -p models
+curl -L -o models/ggml-base.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+```
+
+Or build from source:
 
 ```bash
 brew install cmake ffmpeg git
@@ -115,42 +129,41 @@ git clone https://github.com/ggml-org/whisper.cpp.git
 cd whisper.cpp
 cmake -B build -DWHISPER_METAL=ON
 cmake --build build --config Release -j
-sh ./models/download-ggml-model.sh small
+sh ./models/download-ggml-model.sh base
 ```
 
-Copy `.env.example` to `.env` and set the paths for your local build and model:
+Copy `.env.example` to `.env` and set the paths for your local binary and model:
 
 ```text
-WHISPER_CPP_BIN=/absolute/path/to/whisper.cpp/build/bin/whisper-cli
-WHISPER_MODEL_PATH=/absolute/path/to/whisper.cpp/models/ggml-small.bin
+WHISPER_CPP_BIN=/opt/homebrew/bin/whisper-cli
+WHISPER_MODEL_PATH=/absolute/path/to/salespilot_ai/models/ggml-base.bin
 ```
 
-Restart SalesPilot. The API expects a Whisper.cpp CLI build capable of reading the audio format produced by your browser. If your build cannot read WebM audio, convert it to WAV with FFmpeg or build Whisper.cpp with FFmpeg support. The dashboard's text input remains fully usable without Whisper.
-
-A small multilingual Whisper model is a reasonable starting point on an 8 GB Apple Silicon Mac, but actual latency and language accuracy must be benchmarked on your machine. This prototype does not claim production-grade Hindi/Hinglish telephony recognition.
+Restart SalesPilot. The dashboard's text input and browser Web Speech remain usable even if Whisper.cpp is not configured.
 
 ## Optional local LLM (no hosted API)
 
-The default app does not contact an LLM service. You may optionally run a local model server that exposes an OpenAI-compatible `/v1/chat/completions` endpoint. For example, configure LM Studio to serve a compatible small instruct model locally, then add to `.env`:
+The default app does not contact an LLM service. You may optionally run a local model server exposing an OpenAI-compatible `/v1/chat/completions` endpoint (such as Ollama or LM Studio), then add to `.env`:
 
 ```text
-SALESPILOT_LOCAL_LLM_URL=http://127.0.0.1:1234/v1/chat/completions
-SALESPILOT_LOCAL_LLM_MODEL=your-loaded-local-model-id
+SALESPILOT_LOCAL_LLM_URL=http://127.0.0.1:11434/v1/chat/completions
+SALESPILOT_LOCAL_LLM_MODEL=qcod:latest
 SALESPILOT_LOCAL_LLM_API_KEY=
 ```
 
-Restart the app. When SalesPilot retrieves relevant product passages, it can ask the local model to phrase an answer using only those passages. If the local endpoint is unavailable or returns an invalid response, the deterministic retrieved passage answer is used instead. The model does not calculate scores, update the CRM, or book appointments.
-
-This adapter does not download a model or start a model server for you. Model files may be several gigabytes and are not included in the ZIP. With an 8 GB Mac, use a small quantized model and close memory-heavy applications.
+Restart the app. When configured, the local model can phrase retrieved FAQ answers and conversational turns while scoring, evidence quote verification, RAG citations, and appointment bookings remain deterministic in backend code. If the local endpoint is slow or unavailable, SalesPilot falls back immediately to deterministic responses.
 
 ## Project structure
 
 ```text
 salespilot_ai/
+├── .github/workflows/
+│   └── ci.yml                  # Automated pytest + syntax check workflow
 ├── backend/app/
+│   ├── __main__.py             # Module entry point (python -m backend.app)
 │   ├── main.py                 # FastAPI routes and app factory
 │   ├── db.py                   # SQLite schema and connections
-│   ├── schemas.py              # Request validation
+│   ├── schemas.py              # Pydantic request validation
 │   ├── services/
 │   │   ├── agent.py            # Context-aware extraction, evidence, booking and workflow
 │   │   ├── scoring.py          # Deterministic qualification rubric
@@ -159,13 +172,15 @@ salespilot_ai/
 │   │   └── local_llm.py        # Optional local-only model adapter
 │   └── static/                 # Browser Voice Studio & dashboard (HTML/CSS/JS)
 ├── knowledge_base/             # Sample fictional company documents
-├── data/                       # SQLite database created at runtime
+├── data/                       # Runtime SQLite database folder (.gitkeep tracked)
+├── models/                     # Local Whisper model folder (.gitkeep tracked)
 ├── tests/                      # Automated tests
-├── docs/                       # Architecture, security and evaluation notes
+├── docs/                       # Architecture, security, test report and checklist
 ├── scripts/                    # Test helper
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── .env.example
+├── .gitignore
 ├── run.sh
 └── run.command
 ```
@@ -217,7 +232,7 @@ Lead status: Hot ≥75, Warm ≥50, otherwise Cold. These are demo qualification
 - Real PSTN/SIP telephony, outbound dialing, live full-duplex WebRTC media servers, and production CRM/calendar vendor integrations are not implemented.
 - The appointment calendar is a local demo scheduler. It is not connected to Google Calendar or another external calendar.
 - The UI provides continuous browser VAD turn-taking with Spacebar / optional headphone barge-in over HTTP turns (`/api/voice/turn`), rather than sub-200ms full-duplex WebRTC streaming.
-- No model weights are bundled. The ZIP remains small and does not redistribute third-party model files.
+- No model weights are bundled in git. Clone stays lightweight and does not redistribute third-party model files.
 - The app has no authentication because it is designed for localhost demonstration. Do not expose it to a public network without authentication, TLS, rate limiting, and access controls.
 - SQLite is suitable for this MVP, not a 100,000-user production deployment. See `docs/scalability.md` for the proposed target architecture.
 
